@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "761277169188",
+    "firebase_url": "https://portfolio-9019c-default-rtdb.firebaseio.com",
+    "project_id": "portfolio-9019c",
+    "storage_bucket": "portfolio-9019c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:761277169188:android:8265e3b2d7349eaccde2b1",
+        "android_client_info": {
+          "package_name": "com.example.chattt"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCng_4ssqpwCD7MmhmyDTC1YZ-Py74beDs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:761277169188:android:2e367ef0964b131ecde2b1",
+        "android_client_info": {
+          "package_name": "com.example.sallon"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCng_4ssqpwCD7MmhmyDTC1YZ-Py74beDs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
