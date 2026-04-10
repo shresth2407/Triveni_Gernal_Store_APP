@@ -200,7 +200,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                       ),
 
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 3),
 
                       // ── YOU MIGHT NEED GRID (UPDATED LOGIC) ──────────────────
                       // Use dynamic text for See All / Show Less
@@ -237,24 +237,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           }
                       ),
 
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 1),
 
                       // ── FREE DELIVERY BANNER ─────────────────
                       const _FreeDeliveryBanner(),
 
                       // ── NEW: ADVERTISEMENT SECTIONS ───────────────────────
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 5),
                       const _AdSection(
                         title: 'Bank Offers 💳',
                         ads: _AdData.bankOffers,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 5),
                       const _AdSection(
                         title: 'Weekend Sale 🎉',
                         ads: _AdData.weekendSale,
                       ),
 
-                      const SizedBox(height: 100),
+                      const SizedBox(height: 50),
                     ],
                   ),
                 ),
