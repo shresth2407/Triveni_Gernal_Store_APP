@@ -1,27 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
+import '../../models/admin_order.dart';
 import '../../providers/admin/admin_service_providers.dart';
+import '../../providers/admin/admin_data_providers.dart';
+import '../../providers/admin/admin_auth_provider.dart';
+import '../../services/admin/fcm_service.dart';
 
-// ─── DESIGN TOKENS ────────────────────────────────────────────────
-const _kRed         = Color(0xFFDC143C);
-const _kDarkRed     = Color(0xFFB22222);
-const _kLightRed    = Color(0xFFFFF0F0);
-const _kRoseBorder  = Color(0xFFFFCDD2);
-const _kBg          = Color(0xFFF7F7F7);
-const _kWhite       = Colors.white;
-const _kTextDark    = Color(0xFF1A1A1A);
-const _kTextGrey    = Color(0xFF9E9E9E);
-const _kTextMid     = Color(0xFF555555);
-const _kGreen       = Color(0xFF2E7D32);
-const _kGreenBright = Color(0xFF43A047);
-const _kGreenLight  = Color(0xFFE8F5E9);
-
-// ═════════════════════════════════════════════════════════════════
-// ADMIN DASHBOARD SCREEN
-// ═════════════════════════════════════════════════════════════════
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -30,28 +17,92 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
       _AdminDashboardScreenState();
 }
 
-class _AdminDashboardScreenState
-    extends ConsumerState<AdminDashboardScreen> {
+class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   bool _isSeeding = false;
+  final AdminFcmService _fcmService = AdminFcmService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize FCM
+    _initializeFcm();
+    // Listen for new order notifications
+    _setupOrderNotifications();
+  }
+
+  Future<void> _initializeFcm() async {
+    final adminUser = ref.read(adminAuthStateProvider).valueOrNull;
+    if (adminUser != null) {
+      await _fcmService.initialize(adminUser.uid);
+    }
+  }
+
+  void _setupOrderNotifications() {
+    // Listen to new order stream
+    ref.listenManual(newOrderNotificationsProvider, (previous, next) {
+      next.whenData((order) {
+        if (!mounted) return;
+        
+        // Show notification snackbar
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.notifications_active, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'New Order Received!',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        'Order #${order.id.substring(0, 8)} • ₹${order.totalAmount.toStringAsFixed(0)}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'View',
+              textColor: Colors.white,
+              onPressed: () => context.push('/admin/orders/${order.id}'),
+            ),
+          ),
+        );
+      });
+    });
+  }
 
   Future<void> _seedData() async {
     setState(() => _isSeeding = true);
-    HapticFeedback.mediumImpact();
 
     try {
-      final result =
-      await ref.read(seedServiceProvider).seedData();
+      final result = await ref.read(seedServiceProvider).seedData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '✓ Seeded ${result.categoriesSeeded} categories & '
-                '${result.productsSeeded} products',
+            'Seeded ${result.categoriesSeeded} categories and ${result.productsSeeded} products',
           ),
-          backgroundColor: _kGreenBright,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
         ),
       );
     } catch (e) {
@@ -59,10 +110,7 @@ class _AdminDashboardScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Seed failed: $e'),
-          backgroundColor: _kRed,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+          backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
     } finally {
@@ -71,6 +119,10 @@ class _AdminDashboardScreenState
   }
 
   Future<void> _logout() async {
+    final adminUser = ref.read(adminAuthStateProvider).valueOrNull;
+    if (adminUser != null) {
+      await _fcmService.removeToken(adminUser.uid);
+    }
     await ref.read(adminAuthServiceProvider).signOut();
     if (!mounted) return;
     context.go('/admin/login');
@@ -78,596 +130,330 @@ class _AdminDashboardScreenState
 
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark,
-      child: Scaffold(
-        backgroundColor: _kBg,
-
-        // ── APP BAR ─────────────────────────────────────────────
-        appBar: AppBar(
-          backgroundColor: _kWhite,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(1.5),
-            child: Container(height: 1.5, color: _kRoseBorder),
+    final latestOrdersAsync = ref.watch(latestOrdersProvider(10));
+    final pendingOrdersAsync = ref.watch(adminOrdersProvider);
+    final pendingCount = pendingOrdersAsync.valueOrNull?.length ?? 0;
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Admin Dashboard'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: _logout,
           ),
-          title: Row(
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Quick Actions Section
+          const Text(
+            'Quick Actions',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _NavTile(
+            icon: Icons.category,
+            title: 'Category Manager',
+            onTap: () => context.push('/admin/categories'),
+          ),
+          const SizedBox(height: 12),
+          _NavTile(
+            icon: Icons.inventory_2,
+            title: 'Product Manager',
+            onTap: () => context.push('/admin/products'),
+          ),
+          const SizedBox(height: 12),
+          _NavTile(
+            icon: Icons.receipt_long,
+            title: 'Order Manager',
+            badge: pendingCount > 0 ? pendingCount : null,
+            onTap: () => context.push('/admin/orders'),
+          ),
+          const SizedBox(height: 12),
+          _NavTile(
+            icon: Icons.local_offer,
+            title: 'Discount Manager',
+            onTap: () => context.push('/admin/discounts'),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: _isSeeding ? null : _seedData,
+            child: _isSeeding
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Seed Data'),
+          ),
+          
+          const SizedBox(height: 32),
+          
+          // Latest Orders Section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Admin logo circle
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                      colors: [_kDarkRed, _kRed]),
-                  shape: BoxShape.circle,
+              const Text(
+                'Latest Orders',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                 ),
-                child: const Icon(Icons.admin_panel_settings,
-                    color: _kWhite, size: 20),
               ),
-              const SizedBox(width: 10),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Admin Panel',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                      color: _kTextDark,
-                    ),
-                  ),
-                  Text(
-                    'Triveni General Store',
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: _kTextGrey,
-                        fontWeight: FontWeight.w500),
-                  ),
-                ],
+              TextButton.icon(
+                onPressed: () => context.push('/admin/orders'),
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('See All'),
               ),
             ],
           ),
-          actions: [
-            GestureDetector(
-              onTap: _logout,
-              child: Container(
-                margin: const EdgeInsets.only(right: 16),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _kLightRed,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _kRoseBorder, width: 1.5),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
+          const SizedBox(height: 12),
+          
+          latestOrdersAsync.when(
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32.0),
+                child: CircularProgressIndicator(),
+              ),
+            ),
+            error: (error, _) => Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
                   children: [
-                    Icon(Icons.logout_rounded,
-                        color: _kRed, size: 14),
-                    SizedBox(width: 4),
-                    Text('Logout',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: _kRed,
-                            fontWeight: FontWeight.w700)),
+                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const SizedBox(height: 8),
+                    Text('Failed to load orders: $error'),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: () => ref.invalidate(latestOrdersProvider(10)),
+                      child: const Text('Retry'),
+                    ),
                   ],
                 ),
               ),
             ),
+            data: (orders) {
+              if (orders.isEmpty) {
+                return const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(Icons.inbox_outlined, size: 48, color: Colors.grey),
+                          SizedBox(height: 8),
+                          Text(
+                            'No orders yet',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+              
+              return Column(
+                children: orders.map((order) => _OrderQuickCard(order: order)).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NavTile extends StatelessWidget {
+  const _NavTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.badge,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  final int? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(title),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (badge != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  badge.toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            if (badge != null) const SizedBox(width: 8),
+            const Icon(Icons.chevron_right),
           ],
         ),
+        onTap: onTap,
+      ),
+    );
+  }
+}
 
-        // ── BODY ─────────────────────────────────────────────────
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+// ═════════════════════════════════════════════════════════════════
+// ORDER QUICK CARD (for dashboard)
+// ═════════════════════════════════════════════════════════════════
+class _OrderQuickCard extends StatelessWidget {
+  final AdminOrder order;
+
+  const _OrderQuickCard({required this.order});
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'confirmed':
+        return Colors.blue;
+      case 'preparing':
+        return Colors.orange;
+      case 'out_for_delivery':
+        return Colors.orange;
+      case 'delivered':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getStatusText(String status) {
+    switch (status.toLowerCase()) {
+      case 'confirmed':
+        return 'Confirmed';
+      case 'preparing':
+        return 'Preparing';
+      case 'out_for_delivery':
+        return 'Out for Delivery';
+      case 'delivered':
+        return 'Delivered';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return status;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = _getStatusColor(order.status);
+    final statusText = _getStatusText(order.status);
+    final dateFormat = DateFormat('MMM dd, yyyy • hh:mm a');
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () => context.push('/admin/orders/${order.id}'),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-
-              // ── WELCOME CARD ───────────────────────────────────
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [_kDarkRed, _kRed],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _kRed.withOpacity(0.35),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    // Decorative circles
-                    Positioned(
-                      right: -16,
-                      top: -16,
-                      child: Container(
-                        width: 90,
-                        height: 90,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.08),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: 20,
-                      bottom: -20,
-                      child: Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.06),
-                        ),
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '👋 Welcome Back!',
-                          style: TextStyle(
-                            color: _kWhite,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Manage your store from here.',
-                          style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 13),
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            _MiniStat(
-                                icon: Icons.bolt,
-                                label: 'Express',
-                                value: '8 mins'),
-                            const SizedBox(width: 16),
-                            _MiniStat(
-                                icon: Icons.storefront_outlined,
-                                label: 'Store',
-                                value: 'Online'),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 22),
-
-              // ── SECTION LABEL ──────────────────────────────────
-              _SectionLabel(title: 'Manage Store'),
-
-              const SizedBox(height: 10),
-
-              // ── NAV TILES GRID ─────────────────────────────────
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.55,
+              Row(
                 children: [
-                  _NavCard(
-                    icon: Icons.category_rounded,
-                    title: 'Categories',
-                    subtitle: 'Add & manage',
-                    gradient: [const Color(0xFFB22222), _kRed],
-                    onTap: () => context.push('/admin/categories'),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: statusColor, width: 1),
+                    ),
+                    child: Text(
+                      statusText,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
-                  _NavCard(
-                    icon: Icons.inventory_2_rounded,
-                    title: 'Products',
-                    subtitle: 'Stock & pricing',
-                    gradient: [
-                      const Color(0xFF1565C0),
-                      const Color(0xFF1E88E5)
-                    ],
-                    onTap: () => context.push('/admin/products'),
-                  ),
-                  _NavCard(
-                    icon: Icons.receipt_long_rounded,
-                    title: 'Orders',
-                    subtitle: 'Track & update',
-                    gradient: [
-                      const Color(0xFF2E7D32),
-                      const Color(0xFF43A047)
-                    ],
-                    onTap: () => context.push('/admin/orders'),
-                  ),
-                  _NavCard(
-                    icon: Icons.local_offer_rounded,
-                    title: 'Discounts',
-                    subtitle: 'Offers & coupons',
-                    gradient: [
-                      const Color(0xFF6A1B9A),
-                      const Color(0xFF8E24AA)
-                    ],
-                    onTap: () => context.push('/admin/discounts'),
+                  const Spacer(),
+                  Text(
+                    '₹${order.totalAmount.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
-
-              const SizedBox(height: 22),
-
-              // ── SECTION LABEL ──────────────────────────────────
-              _SectionLabel(title: 'Database'),
-
-              const SizedBox(height: 10),
-
-              // ── SEED DATA CARD ─────────────────────────────────
-              Container(
-                decoration: BoxDecoration(
-                  color: _kWhite,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: _kRoseBorder, width: 1.5),
-                  boxShadow: const [
-                    BoxShadow(
-                        color: Color(0x0EB22222),
-                        blurRadius: 10,
-                        offset: Offset(0, 3)),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          color: _kLightRed,
-                          borderRadius: BorderRadius.circular(14),
-                          border:
-                          Border.all(color: _kRoseBorder, width: 1.5),
-                        ),
-                        child: const Icon(Icons.storage_rounded,
-                            color: _kRed, size: 24),
-                      ),
-                      const SizedBox(width: 14),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Seed Sample Data',
-                                style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                    color: _kTextDark)),
-                            SizedBox(height: 2),
-                            Text(
-                                'Populate categories & products\nfor testing',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: _kTextGrey,
-                                    height: 1.4)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      GestureDetector(
-                        onTap: _isSeeding ? null : _seedData,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: _isSeeding
-                                  ? [
-                                const Color(0xFFCC5555),
-                                const Color(0xFFCC5555)
-                              ]
-                                  : [_kDarkRed, _kRed],
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: _isSeeding
-                                ? []
-                                : [
-                              BoxShadow(
-                                  color: _kRed.withOpacity(0.35),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3)),
-                            ],
-                          ),
-                          child: _isSeeding
-                              ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: _kWhite),
-                          )
-                              : const Text('Seed',
-                              style: TextStyle(
-                                  color: _kWhite,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800)),
-                        ),
-                      ),
-                    ],
-                  ),
+              const SizedBox(height: 8),
+              Text(
+                'Order #${order.id.substring(0, 8)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
                 ),
               ),
-
-              const SizedBox(height: 22),
-
-              // ── QUICK TIPS CARD ────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _kGreenLight,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: const Color(0xFFA5D6A7), width: 1.5),
+              const SizedBox(height: 4),
+              Text(
+                dateFormat.format(order.createdAt),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.tips_and_updates_outlined,
-                            color: _kGreenBright, size: 18),
-                        SizedBox(width: 8),
-                        Text('Quick Tips',
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                color: _kGreen)),
-                      ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.shopping_bag_outlined, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${order.items.length} ${order.items.length == 1 ? 'item' : 'items'}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
                     ),
-                    const SizedBox(height: 8),
-                    _TipRow(
-                        text:
-                        'Add categories first before adding products.'),
-                    _TipRow(
-                        text:
-                        'Use Seed Data only once for fresh setup.'),
-                    _TipRow(
-                        text:
-                        'Update order status promptly to notify customers.'),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 16),
+                  Icon(
+                    order.paymentMethod == 'COD' 
+                        ? Icons.money_outlined 
+                        : Icons.qr_code_scanner_rounded,
+                    size: 16,
+                    color: Colors.grey[600],
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    order.paymentMethod,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════
-// MINI STAT  (inside welcome card)
-// ═════════════════════════════════════════════════════════════════
-class _MiniStat extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _MiniStat({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding:
-      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: _kWhite, size: 13),
-          const SizedBox(width: 4),
-          Text(value,
-              style: const TextStyle(
-                  color: _kWhite,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800)),
-          const SizedBox(width: 3),
-          Text(label,
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.75),
-                  fontSize: 10)),
-        ],
-      ),
-    );
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════
-// SECTION LABEL
-// ═════════════════════════════════════════════════════════════════
-class _SectionLabel extends StatelessWidget {
-  final String title;
-
-  const _SectionLabel({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 4,
-          height: 18,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-                colors: [_kDarkRed, _kRed],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(title,
-            style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: _kTextDark)),
-      ],
-    );
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════
-// NAV CARD  (2×2 grid)
-// ═════════════════════════════════════════════════════════════════
-class _NavCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final List<Color> gradient;
-  final VoidCallback onTap;
-
-  const _NavCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.gradient,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradient,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: gradient.last.withOpacity(0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            // Decorative circle
-            Positioned(
-              right: -10,
-              bottom: -10,
-              child: Container(
-                width: 55,
-                height: 55,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.1),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(icon, color: _kWhite, size: 20),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: const TextStyle(
-                              color: _kWhite,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800)),
-                      Text(subtitle,
-                          style: TextStyle(
-                              color: Colors.white.withOpacity(0.75),
-                              fontSize: 10)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            // Chevron
-            Positioned(
-              top: 10,
-              right: 10,
-              child: Icon(Icons.arrow_forward_ios_rounded,
-                  color: Colors.white.withOpacity(0.5), size: 12),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════
-// TIP ROW
-// ═════════════════════════════════════════════════════════════════
-class _TipRow extends StatelessWidget {
-  final String text;
-
-  const _TipRow({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 5),
-            child: Container(
-              width: 5,
-              height: 5,
-              decoration: const BoxDecoration(
-                  color: _kGreenBright, shape: BoxShape.circle),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(text,
-                style: const TextStyle(
-                    fontSize: 12,
-                    color: _kGreen,
-                    height: 1.4)),
-          ),
-        ],
       ),
     );
   }

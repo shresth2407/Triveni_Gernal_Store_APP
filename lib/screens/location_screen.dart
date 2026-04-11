@@ -68,12 +68,14 @@ class _LocationScreenState extends ConsumerState<LocationScreen>
     setState(() => _validationError = null);
     ref.read(locationProvider.notifier).setManual(text);
     
-    // Check if we came from checkout
+    // Check where we came from
     final uri = GoRouterState.of(context).uri;
-    final fromCheckout = uri.queryParameters['from'] == 'checkout';
+    final from = uri.queryParameters['from'];
     
-    if (fromCheckout) {
+    if (from == 'checkout') {
       context.go('/checkout');
+    } else if (from == 'profile') {
+      context.go('/profile');
     } else {
       context.go('/home');
     }

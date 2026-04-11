@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 
 import 'providers/auth_provider.dart';
 import 'providers/location_provider.dart';
+import 'providers/service_providers.dart';
 import 'providers/admin/admin_auth_provider.dart';
 import 'models/location_state.dart';
+import 'models/user_profile.dart';
 import 'screens/auth_screen.dart';
 import 'screens/location_screen.dart';
 import 'screens/home_screen.dart';
@@ -15,6 +17,9 @@ import 'screens/item_detail_screen.dart';
 import 'screens/cart_screen.dart';
 import 'screens/checkout_screen.dart';
 import 'screens/order_confirmation_screen.dart';
+import 'screens/user_orders_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/splash_screen.dart';
 import 'screens/admin/admin_login_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/admin/category_manager_screen.dart';
@@ -46,11 +51,15 @@ class RouterNotifier extends ChangeNotifier {
     // Admin routes are handled entirely by AdminRouterNotifier — skip them here
     if (path.startsWith('/admin')) return null;
 
+    // Allow splash screen to handle initial routing
+    if (path == '/') return null;
+
     final authState = _ref.read(authStateProvider);
     final locationState = _ref.read(locationProvider);
 
     final isAuthenticated = authState.valueOrNull != null;
     final hasLocation = locationState.address != null;
+    final isLoadingLocation = locationState.isLoading;
 
     final isOnAuth = path == '/auth';
     final isOnLocation = path == '/location';
@@ -60,13 +69,20 @@ class RouterNotifier extends ChangeNotifier {
       return isOnAuth ? null : '/auth';
     }
 
+    // Wait for location to finish loading before redirecting
+    if (isLoadingLocation) {
+      return null;
+    }
+
     // Location guard: authenticated but no location → /location
+    // Only redirect if user doesn't have location AND is not already on location page
     if (!hasLocation) {
       return isOnLocation ? null : '/location';
     }
 
-    // Authenticated + has location: redirect away from /auth and /location
-    if (isOnAuth || isOnLocation) {
+    // Authenticated + has location: redirect away from /auth only
+    // Allow access to /location for changing address
+    if (isOnAuth) {
       return '/home';
     }
 
@@ -124,7 +140,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final adminNotifier = ref.watch(adminRouterNotifierProvider);
 
   return GoRouter(
-    initialLocation: '/auth',
+    initialLocation: '/',
     refreshListenable: Listenable.merge([notifier, adminNotifier]),
     redirect: (context, state) {
       final customerRedirect = notifier.redirect(context, state);
@@ -132,6 +148,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       return adminNotifier.redirect(context, state);
     },
     routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const SplashScreen(),
+      ),
       GoRoute(
         path: '/auth',
         builder: (context, state) => const AuthScreen(),
@@ -166,6 +186,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/confirmation',
         builder: (context, state) => const OrderConfirmationScreen(),
+      ),
+      GoRoute(
+        path: '/orders',
+        builder: (context, state) => const UserOrdersScreen(),
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen(),
       ),
       // Admin routes
       GoRoute(

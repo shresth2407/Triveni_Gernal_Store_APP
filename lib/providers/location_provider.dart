@@ -12,7 +12,7 @@ final locationServiceProvider = Provider<LocationService>((ref) {
 class LocationNotifier extends StateNotifier<LocationState> {
   final LocationService _locationService;
 
-  LocationNotifier(this._locationService) : super(const LocationState()) {
+  LocationNotifier(this._locationService) : super(const LocationState(isLoading: true)) {
     _loadCached();
   }
 
@@ -22,6 +22,8 @@ class LocationNotifier extends StateNotifier<LocationState> {
     final saved = prefs.getString(_kLocationKey);
     if (saved != null && saved.isNotEmpty) {
       state = LocationState(address: saved);
+    } else {
+      state = const LocationState(); // No cached location, set loading to false
     }
   }
 

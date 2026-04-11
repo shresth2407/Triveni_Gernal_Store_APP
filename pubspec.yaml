@@ -17,6 +17,7 @@ dependencies:
   firebase_core: ^3.0.0
   firebase_auth: ^5.0.0
   cloud_firestore: ^5.0.0
+  firebase_messaging: ^15.0.0
 
   # State management
   flutter_riverpod: ^2.5.1
@@ -30,6 +31,9 @@ dependencies:
   geolocator: ^13.0.0
   geocoding: ^3.0.0
   shared_preferences: ^2.2.3
+  
+  # Date formatting
+  intl: ^0.19.0
 
   # Payment
 #  upi_india: ^3.0.0
