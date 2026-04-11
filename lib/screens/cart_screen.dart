@@ -287,164 +287,157 @@ class _ModernCartItemCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final item = cartItem.item;
     final cartState = ref.watch(cartProvider);
-    
-    // Find the DiscountedLine for this cart item
+
     final discountedLine = cartState.discountedCart?.lines.firstWhere(
-      (line) => line.cartItem.item.id == item.id,
-      orElse: () => throw StateError('Cart item not found in discounted cart'),
+          (line) => line.cartItem.item.id == item.id,
+      orElse: () => throw StateError('Cart item not found'),
     );
-    
+
     final appliedDiscount = discountedLine?.appliedDiscount;
-    final discountedLineTotal = discountedLine?.discountedLineTotal ?? item.price * cartItem.quantity;
-    
-    // Calculate discounted unit price for percentage discounts
-    double? discountedUnitPrice;
+    final total =
+        discountedLine?.discountedLineTotal ??
+            item.price * cartItem.quantity;
+
+    double? discountedPrice;
     if (appliedDiscount?.type == DiscountType.percentage) {
-      discountedUnitPrice = item.price * (1 - appliedDiscount!.value! / 100);
+      discountedPrice =
+          item.price * (1 - appliedDiscount!.value! / 100);
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.symmetric(horizontal:0, vertical: 6),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: _kWhite,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kRoseBorder.withOpacity(0.3)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.03),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            // Image
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: _kLightRed,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: Image.network(
-                  item.imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Center(
-                      child: Icon(Icons.broken_image_outlined,
-                          color: _kRoseBorder, size: 32)),
-                ),
-              ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // 🖼 Image
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.network(
+              item.imageUrl,
+              width: 44,
+              height: 44,
+              fit: BoxFit.cover,
             ),
+          ),
 
-            const SizedBox(width: 16),
+          const SizedBox(width: 10),
 
-            // Details
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: _kTextDark,
-                      height: 1.2,
-                    ),
+          // 📄 Left Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
-                  const SizedBox(height: 4),
-
-                  // Price Row
-                  Row(
-                    children: [
-                      // Show discounted unit price for percentage discounts, regular price otherwise
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Text(
+                      '₹${(discountedPrice ?? item.price).toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _kRed,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    if (appliedDiscount?.type ==
+                        DiscountType.percentage)
                       Text(
-                        '₹${(discountedUnitPrice ?? item.price).toStringAsFixed(0)}',
+                        '₹${item.price.toStringAsFixed(0)}',
                         style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: _kRed,
+                          fontSize: 11,
+                          decoration: TextDecoration.lineThrough,
+                          color: _kTextGrey,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      
-                      // Show strikethrough original price for percentage discounts
-                      if (appliedDiscount?.type == DiscountType.percentage)
-                        Text(
-                          '₹${item.price.toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: _kTextGrey,
-                            decoration: TextDecoration.lineThrough,
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // 🔥 RIGHT SIDE CONTROL
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: appliedDiscount != null
+                ? MainAxisAlignment.spaceBetween
+                : MainAxisAlignment.center, // 🔥 center if no badge
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 🔥 Badge (Top)
+              if (appliedDiscount != null)
+                DiscountBadge(discount: appliedDiscount),
+
+              // 🔥 Bottom (Stepper + Price)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Stepper
+                  Container(
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: _kBg,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        _ModernStepperBtn(
+                            icon: Icons.remove, onTap: onDecrement),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(
+                            '${cartItem.quantity}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      
-                      const SizedBox(width: 6),
-                      
-                      // Show discount badge when a discount applies
-                      if (appliedDiscount != null)
-                        DiscountBadge(discount: appliedDiscount),
-                    ],
+                        _ModernStepperBtn(
+                            icon: Icons.add, onTap: onIncrement),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 12),
 
-                  // Bottom Row: Stepper & Total
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Modern Stepper
-                      Container(
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: _kBg,
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _ModernStepperBtn(
-                                icon: Icons.remove,
-                                onTap: onDecrement),
-                            Container(
-                              width: 40,
-                              alignment: Alignment.center,
-                              child: Text(
-                                '${cartItem.quantity}',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  color: _kTextDark,
-                                ),
-                              ),
-                            ),
-                            _ModernStepperBtn(
-                                icon: Icons.add,
-                                onTap: onIncrement),
-                          ],
-                        ),
-                      ),
-                      // Total (show discounted line total)
-                      Text(
-                        '₹${discountedLineTotal.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: _kTextDark,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(width: 8),
+
+                  // Total Price
+                  Text(
+                    '₹${total.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
