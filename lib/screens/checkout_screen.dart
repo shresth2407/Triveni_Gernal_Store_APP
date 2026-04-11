@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_upi_india/flutter_upi_india.dart';
 
 import '../models/cart_item.dart';
 import '../models/order_request.dart';
@@ -39,22 +40,153 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   bool   _isLoading     = false;
   String? _error;
 
-  // ─── BACKEND LOGIC (UNCHANGED) ─────────────────────────────────
+  // ─── PLACE ORDER LOGIC ─────────────────────────────────
   Future<void> _placeOrder() async {
+    // If UPI is selected, show UPI app selection dialog
+    if (_paymentMethod == 'UPI') {
+      await _handleUpiPayment();
+      return;
+    }
+
+    // COD payment - proceed directly
+    await _processCodOrder();
+  }
+
+  Future<void> _handleUpiPayment() async {
+    setState(() { _isLoading = true; _error = null; });
+
+    try {
+      final paymentService = ref.read(paymentServiceProvider);
+      final upiApps = await paymentService.getInstalledUpiApps();
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      if (upiApps.isEmpty) {
+        setState(() => _error = 'No UPI apps found. Please install a UPI app or use Cash on Delivery.');
+        return;
+      }
+
+      // Show UPI app selection dialog
+      final selectedAppMeta = await showDialog<ApplicationMeta>(
+        context: context,
+        builder: (context) => _UpiAppSelectionDialog(apps: upiApps),
+      );
+
+      if (selectedAppMeta == null) return; // User cancelled
+
+      // Initiate UPI payment
+      await _processUpiPayment(selectedAppMeta);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to load UPI apps: ${e.toString()}';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _processUpiPayment(ApplicationMeta appMeta) async {
     setState(() { _isLoading = true; _error = null; });
 
     final cartState    = ref.read(cartProvider);
     final location     = ref.read(locationProvider).address ?? '';
     final user         = ref.read(authStateProvider).valueOrNull;
     final orderService = ref.read(orderServiceProvider);
+    final paymentService = ref.read(paymentServiceProvider);
+    final profileService = ref.read(profileServiceProvider);
+    final grand = cartState.total + (cartState.total >= 149 ? 0.0 : 30.0);
 
     try {
+      // Get user profile
+      final profile = await profileService.getUserProfile(user?.uid ?? '');
+      
+      if (profile == null || !profile.isComplete) {
+        if (!mounted) return;
+        setState(() {
+          _error = 'Please complete your profile (name, phone, address) before placing an order.';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // First create the order
       final request = OrderRequest(
         userId:           user?.uid ?? '',
+        userName:         profile.name,
+        userPhone:        profile.phoneNumber,
         deliveryLocation: location,
         items:            cartState.items,
-        totalAmount:      cartState.total,
-        paymentMethod:    _paymentMethod,
+        totalAmount:      grand,
+        paymentMethod:    'UPI',
+      );
+
+      final orderId = await orderService.placeOrder(request);
+
+      // Then initiate UPI payment
+      final response = await paymentService.initiateUpiPayment(
+        app: appMeta.upiApplication,
+        amount: grand.toStringAsFixed(2),
+        orderId: orderId,
+      );
+
+      if (!mounted) return;
+
+      // Check payment status
+      if (response.status == UpiTransactionStatus.success) {
+        context.go('/confirmation', extra: orderId);
+      } else if (response.status == UpiTransactionStatus.failure) {
+        setState(() {
+          _error = 'Payment failed. Please try again or use Cash on Delivery.';
+          _isLoading = false;
+        });
+      } else {
+        // Submitted or other status
+        setState(() {
+          _error = 'Payment status: ${response.status}. Please check your UPI app.';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Payment error: ${e.toString()}';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _processCodOrder() async {
+    setState(() { _isLoading = true; _error = null; });
+
+    final cartState    = ref.read(cartProvider);
+    final location     = ref.read(locationProvider).address ?? '';
+    final user         = ref.read(authStateProvider).valueOrNull;
+    final orderService = ref.read(orderServiceProvider);
+    final profileService = ref.read(profileServiceProvider);
+    final grand = cartState.total + (cartState.total >= 149 ? 0.0 : 30.0);
+
+    try {
+      // Get user profile
+      final profile = await profileService.getUserProfile(user?.uid ?? '');
+      
+      if (profile == null || !profile.isComplete) {
+        if (!mounted) return;
+        setState(() {
+          _error = 'Please complete your profile (name, phone, address) before placing an order.';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final request = OrderRequest(
+        userId:           user?.uid ?? '',
+        userName:         profile.name,
+        userPhone:        profile.phoneNumber,
+        deliveryLocation: location,
+        items:            cartState.items,
+        totalAmount:      grand,
+        paymentMethod:    'COD',
       );
 
       final confirmedOrderId = await orderService.placeOrder(request);
@@ -76,9 +208,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final savings   = cartState.total * 0.20;
     final grand     = cartState.total + delivery;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark,
-      child: Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (!didPop) {
+          context.go('/cart');
+        }
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.dark,
+        child: Scaffold(
         backgroundColor: _kBg,
 
         // ── MODERN APP BAR ───────────────────────────────────────
@@ -355,6 +494,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           paymentMethod: _paymentMethod,
           onPlaceOrder: _isLoading ? null : _placeOrder,
         ),
+      ),
       ),
     );
   }
@@ -837,6 +977,165 @@ class _ModernIconButton extends StatelessWidget {
           shape: BoxShape.circle,
         ),
         child: Icon(icon, color: _kTextDark, size: 18),
+      ),
+    );
+  }
+}
+
+
+// ═════════════════════════════════════════════════════════════════
+// UPI APP SELECTION DIALOG
+// ═════════════════════════════════════════════════════════════════
+class _UpiAppSelectionDialog extends StatelessWidget {
+  final List<ApplicationMeta> apps;
+
+  const _UpiAppSelectionDialog({required this.apps});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _kLightRed,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.payment, color: _kRed, size: 24),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Text(
+                    'Select UPI App',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: _kTextDark,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: _kTextGrey),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Choose your preferred UPI app to complete the payment',
+              style: TextStyle(
+                fontSize: 13,
+                color: _kTextMid,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 400),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: apps.length,
+                itemBuilder: (context, index) {
+                  final app = apps[index];
+                  return _UpiAppTile(
+                    app: app,
+                    onTap: () => Navigator.of(context).pop(app),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════
+// UPI APP TILE
+// ═════════════════════════════════════════════════════════════════
+class _UpiAppTile extends StatelessWidget {
+  final ApplicationMeta app;
+  final VoidCallback onTap;
+
+  const _UpiAppTile({required this.app, required this.onTap});
+
+  String _getAppDisplayName(ApplicationMeta appMeta) {
+    // Map package names to display names
+    final Map<String, String> appNames = {
+      'com.google.android.apps.nbu.paisa.user': 'Google Pay',
+      'net.one97.paytm': 'Paytm',
+      'in.org.npci.upiapp': 'BHIM',
+      'com.phonepe.app': 'PhonePe',
+      'com.amazon.mobile.shopping': 'Amazon Pay',
+      'com.whatsapp': 'WhatsApp',
+      'com.dreamplug.androidapp': 'CRED',
+      'com.mobikwik_new': 'MobiKwik',
+      'com.freecharge.android': 'FreeCharge',
+    };
+
+    return appNames[appMeta.upiApplication.androidPackageName] ?? appMeta.upiApplication.appName;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = _getAppDisplayName(app);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: _kWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _kRoseBorder, width: 1.5),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(15),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // App icon
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: _kBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: app.iconImage(48),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // App name
+                Expanded(
+                  child: Text(
+                    displayName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: _kTextDark,
+                    ),
+                  ),
+                ),
+                // Arrow icon
+                const Icon(Icons.arrow_forward_ios, color: _kTextGrey, size: 16),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -29,6 +29,8 @@ class AdminOrderItem {
 class AdminOrder {
   final String id;
   final String userId;
+  final String userName;
+  final String userPhone;
   final String deliveryLocation;
   final List<AdminOrderItem> items;
   final double totalAmount;
@@ -39,6 +41,8 @@ class AdminOrder {
   const AdminOrder({
     required this.id,
     required this.userId,
+    required this.userName,
+    required this.userPhone,
     required this.deliveryLocation,
     required this.items,
     required this.totalAmount,
@@ -53,6 +57,8 @@ class AdminOrder {
     return AdminOrder(
       id: doc.id,
       userId: data['userId'] as String,
+      userName: data['userName'] as String? ?? '',
+      userPhone: data['userPhone'] as String? ?? '',
       deliveryLocation: data['deliveryLocation'] as String,
       items: rawItems
           .map((e) => AdminOrderItem.fromMap(e as Map<String, dynamic>))

@@ -1,37 +1,42 @@
-// import 'package:upi_india/upi_india.dart';
-//
-// abstract class PaymentService {
-//   Future<UpiResponse> initiateUpiPayment({
-//     required String amount,
-//     required String orderId,
-//   });
-// }
-//
-// class UpiPaymentService implements PaymentService {
-//   final String receiverUpiId;
-//   final String receiverName;
-//   final UpiApp? defaultApp;
-//   final UpiIndia _upiIndia;
-//
-//   UpiPaymentService({
-//     this.receiverUpiId = 'merchant@upi',
-//     this.receiverName = 'Grocery Store',
-//     this.defaultApp,
-//     UpiIndia? upiIndia,
-//   }) : _upiIndia = upiIndia ?? UpiIndia();
-//
-//   @override
-//   Future<UpiResponse> initiateUpiPayment({
-//     required String amount,
-//     required String orderId,
-//   }) {
-//     return _upiIndia.startTransaction(
-//       app: defaultApp ?? UpiApp.googlePay,
-//       receiverUpiId: receiverUpiId,
-//       receiverName: receiverName,
-//       transactionRefId: orderId,
-//       transactionNote: 'Grocery order payment',
-//       amount: double.parse(amount),
-//     );
-//   }
-// }
+import 'package:flutter_upi_india/flutter_upi_india.dart';
+
+abstract class PaymentService {
+  Future<List<ApplicationMeta>> getInstalledUpiApps();
+  Future<UpiTransactionResponse> initiateUpiPayment({
+    required UpiApplication app,
+    required String amount,
+    required String orderId,
+  });
+}
+
+class UpiPaymentService implements PaymentService {
+  final String receiverUpiId;
+  final String receiverName;
+
+  UpiPaymentService({
+    this.receiverUpiId = 'merchant@upi',
+    this.receiverName = 'Triveni Store',
+  });
+
+  @override
+  Future<List<ApplicationMeta>> getInstalledUpiApps() async {
+    return await UpiPay.getInstalledUpiApplications();
+  }
+
+  @override
+  Future<UpiTransactionResponse> initiateUpiPayment({
+    required UpiApplication app,
+    required String amount,
+    required String orderId,
+  }) async {
+    return await UpiPay.initiateTransaction(
+      app: app,
+      receiverUpiAddress: receiverUpiId,
+      receiverName: receiverName,
+      transactionRef: orderId,
+      transactionNote: 'Order #${orderId.substring(0, 8)}',
+      amount: amount,
+    );
+  }
+}
+

@@ -3,6 +3,7 @@ import '../models/models.dart';
 
 abstract class OrderService {
   Future<String> placeOrder(OrderRequest request); // returns orderId
+  Stream<List<AdminOrder>> watchUserOrders(String userId);
 }
 
 class FirestoreOrderService implements OrderService {
@@ -15,6 +16,8 @@ class FirestoreOrderService implements OrderService {
   Future<String> placeOrder(OrderRequest request) async {
     final docRef = await _firestore.collection('orders').add({
       'userId': request.userId,
+      'userName': request.userName,
+      'userPhone': request.userPhone,
       'deliveryLocation': request.deliveryLocation,
       'items': request.items.map((cartItem) => {
         'productId': cartItem.item.id,
@@ -29,5 +32,16 @@ class FirestoreOrderService implements OrderService {
       'createdAt': FieldValue.serverTimestamp(),
     });
     return docRef.id;
+  }
+
+  @override
+  Stream<List<AdminOrder>> watchUserOrders(String userId) {
+    return _firestore
+        .collection('orders')
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) =>
+            snapshot.docs.map(AdminOrder.fromFirestore).toList());
   }
 }

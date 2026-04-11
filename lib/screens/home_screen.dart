@@ -1885,28 +1885,35 @@ class _Header extends ConsumerWidget {
                   ),
                 ),
               if (cartState.items.isNotEmpty) const SizedBox(width: 8),
+              // Orders button
               _CircleBtn(
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('₹',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: _kDarkRed,
-                            fontWeight: FontWeight.w800)),
-                    Text('₹0',
-                        style: TextStyle(
-                            fontSize: 7,
-                            color: _kDarkRed,
-                            fontWeight: FontWeight.w700)),
-                  ],
-                ),
+                onTap: () => context.push('/orders'),
+                child: const Icon(Icons.receipt_long_outlined, color: _kDarkRed, size: 20),
               ),
               const SizedBox(width: 8),
+              // Profile button
               _CircleBtn(
-                onTap: onLogout,
-                child: const Icon(Icons.logout, color: _kDarkRed, size: 20),
+                onTap: () => context.push('/profile'),
+                child: const Icon(Icons.person_outline, color: _kDarkRed, size: 20),
               ),
+              // const SizedBox(width: 8),
+              // _CircleBtn(
+              //   child: const Column(
+              //     mainAxisAlignment: MainAxisAlignment.center,
+              //     children: [
+              //       Text('₹',
+              //           style: TextStyle(
+              //               fontSize: 12,
+              //               color: _kDarkRed,
+              //               fontWeight: FontWeight.w800)),
+              //       Text('₹0',
+              //           style: TextStyle(
+              //               fontSize: 7,
+              //               color: _kDarkRed,
+              //               fontWeight: FontWeight.w700)),
+              //     ],
+              //   ),
+              // ),
             ],
           ),
         ],
