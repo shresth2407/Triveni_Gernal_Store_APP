@@ -3,10 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../models/cart_item.dart';
+import '../models/discount.dart';
 import '../models/item.dart';
 import '../providers/cart_provider.dart';
+import '../providers/discount_providers.dart';
 import '../providers/product_providers.dart';
 import '../providers/service_providers.dart';
+import '../services/discount_engine.dart';
+import '../widgets/discount_badge.dart';
 
 // ─── DESIGN TOKENS (Matching HomeScreen) ─────────────────────────────
 const _kRed         = Color(0xFFDC143C);
@@ -38,6 +43,8 @@ class ItemDetailScreen extends ConsumerWidget {
     // Fetch all items for "You Might Also Like"
     final allItemsAsync = ref.watch(itemsProvider(null));
 
+
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark,
       child: Scaffold(
@@ -62,9 +69,23 @@ class _ItemDetailBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Watch cart state
     final cartNotifier = ref.read(cartProvider.notifier);
-    ref.watch(cartProvider);
+    final cartState = ref.watch(cartProvider);
     final qty = cartNotifier.quantityOf(item.id);
-    final totalPrice = (item.price * qty).toStringAsFixed(0);
+
+    // Resolve best discount via DiscountEngine
+    final activeDiscountsAsync = ref.watch(activeDiscountsProvider);
+    final activeDiscounts = activeDiscountsAsync.valueOrNull ?? [];
+    final bestDiscount = DiscountEngine().bestDiscount(item, activeDiscounts);
+    
+    // Calculate discounted price for the total using DiscountEngine
+    final totalPrice = qty > 0
+        ? DiscountEngine()
+            .computeLineTotal(
+              CartItem(item: item, quantity: qty),
+              activeDiscounts,
+            )
+            .toStringAsFixed(0)
+        : '0';
 
     return Stack(
       children: [
@@ -106,9 +127,65 @@ class _ItemDetailBody extends ConsumerWidget {
                             icon: Icons.arrow_back_ios_new,
                             onTap: () => context.pop(),
                           ),
-                          _CircleBtn(
-                            icon: Icons.share_outlined,
-                            onTap: () {}, // TODO: Implement share
+                          Row(
+                            children: [
+                              // Cart button
+                              if (cartState.items.isNotEmpty)
+                                GestureDetector(
+                                  onTap: () => context.push('/cart'),
+                                  child: Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: _kWhite.withOpacity(0.85),
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Stack(
+                                      children: [
+                                        const Center(
+                                          child: Icon(Icons.shopping_bag_outlined, color: _kDarkRed, size: 20),
+                                        ),
+                                        Positioned(
+                                          top: 6,
+                                          right: 6,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: const BoxDecoration(
+                                              color: _kRed,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            constraints: const BoxConstraints(
+                                              minWidth: 16,
+                                              minHeight: 16,
+                                            ),
+                                            child: Text(
+                                              '${cartState.items.length}',
+                                              style: const TextStyle(
+                                                color: _kWhite,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(width: 8),
+                              _CircleBtn(
+                                icon: Icons.share_outlined,
+                                onTap: () {}, // TODO: Implement share
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -194,50 +271,8 @@ class _ItemDetailBody extends ConsumerWidget {
                       ),
                       const SizedBox(height: 5),
 
-                      // Price Section
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '₹${item.price.toStringAsFixed(0)}',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              color: _kTextDark,
-                              height: 0.9,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: Text(
-                              '₹${(item.price * 1.2).toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                color: _kTextGrey,
-                                decoration: TextDecoration.lineThrough,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: _kGreen.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              '20% OFF',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: _kGreen,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      // Price Section — driven by DiscountEngine (Requirements 7.1–7.4)
+                      _PriceSection(item: item, discount: bestDiscount),
                       const SizedBox(height: 15),
 
                       // Description
@@ -433,6 +468,92 @@ class _ItemDetailBody extends ConsumerWidget {
 // ═════════════════════════════════════════════════════════════════
 // HELPER WIDGETS
 // ═════════════════════════════════════════════════════════════════
+
+/// Displays price and discount badge based on DiscountEngine result.
+///
+/// - percentage discount: DiscountBadge + discounted price + original strikethrough
+/// - bogo/bulk discount:  DiscountBadge + original price only
+/// - no discount:         original price only, no badge
+class _PriceSection extends StatelessWidget {
+  final Item item;
+  final Discount? discount;
+
+  const _PriceSection({required this.item, required this.discount});
+
+  @override
+  Widget build(BuildContext context) {
+    if (discount == null) {
+      // Requirement 7.4: no discount — show regular price only
+      return Text(
+        '₹${item.price.toStringAsFixed(0)}',
+        style: const TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w900,
+          color: _kTextDark,
+          height: 0.9,
+        ),
+      );
+    }
+
+    if (discount!.type == DiscountType.percentage) {
+      // Requirement 7.2: percentage — badge + discounted price + original strikethrough
+      final discountedPrice =
+          item.price * (1 - (discount!.value ?? 0) / 100);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DiscountBadge(discount: discount!),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '₹${discountedPrice.toStringAsFixed(0)}',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: _kTextDark,
+                  height: 0.9,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  '₹${item.price.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: _kTextGrey,
+                    decoration: TextDecoration.lineThrough,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    // Requirement 7.3: bogo/bulk — badge + original price only
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DiscountBadge(discount: discount!),
+        const SizedBox(height: 6),
+        Text(
+          '₹${item.price.toStringAsFixed(0)}',
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w900,
+            color: _kTextDark,
+            height: 0.9,
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _CircleBtn extends StatelessWidget {
   final IconData icon;

@@ -7,3 +7,4 @@ export 'order_request.dart';
 export 'admin_order.dart';
 export 'admin_state.dart';
 export 'seed_result.dart';
+export 'discount.dart';

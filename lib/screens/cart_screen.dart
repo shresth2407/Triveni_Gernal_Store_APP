@@ -1,10 +1,15 @@
+
+
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/cart_item.dart';
+import '../models/discount.dart';
 import '../providers/cart_provider.dart';
+import '../widgets/discount_badge.dart';
 
 // ─── DESIGN TOKENS (Same as home_screen) ─────────────────────────
 const _kRed         = Color(0xFFDC143C);
@@ -165,11 +170,13 @@ class CartScreen extends ConsumerWidget {
             _ModernCouponStrip(),
 
             // ── BILL SUMMARY ───────────────────────────────
-            _ModernBillSummary(total: cartState.total),
+            _ModernBillSummary(
+              cartState: cartState,
+            ),
 
             // ── CHECKOUT BAR (Floating Style) ───────────────
             _ModernCheckoutBar(
-              total: cartState.total,
+              total: cartState.grandTotal,
               itemCount: cartState.items.length,
               onCheckout: () => context.go('/checkout'),
             ),
@@ -265,7 +272,7 @@ class _ModernEmptyCartView extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════════
 // MODERN CART ITEM CARD
 // ═════════════════════════════════════════════════════════════════
-class _ModernCartItemCard extends StatelessWidget {
+class _ModernCartItemCard extends ConsumerWidget {
   final CartItem cartItem;
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
@@ -277,9 +284,24 @@ class _ModernCartItemCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final item = cartItem.item;
-    final mrp  = (item.price * 1.2).toStringAsFixed(0);
+    final cartState = ref.watch(cartProvider);
+    
+    // Find the DiscountedLine for this cart item
+    final discountedLine = cartState.discountedCart?.lines.firstWhere(
+      (line) => line.cartItem.item.id == item.id,
+      orElse: () => throw StateError('Cart item not found in discounted cart'),
+    );
+    
+    final appliedDiscount = discountedLine?.appliedDiscount;
+    final discountedLineTotal = discountedLine?.discountedLineTotal ?? item.price * cartItem.quantity;
+    
+    // Calculate discounted unit price for percentage discounts
+    double? discountedUnitPrice;
+    if (appliedDiscount?.type == DiscountType.percentage) {
+      discountedUnitPrice = item.price * (1 - appliedDiscount!.value! / 100);
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -341,8 +363,9 @@ class _ModernCartItemCard extends StatelessWidget {
                   // Price Row
                   Row(
                     children: [
+                      // Show discounted unit price for percentage discounts, regular price otherwise
                       Text(
-                        '₹${item.price.toStringAsFixed(0)}',
+                        '₹${(discountedUnitPrice ?? item.price).toStringAsFixed(0)}',
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w800,
@@ -350,31 +373,23 @@ class _ModernCartItemCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        '₹$mrp',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: _kTextGrey,
-                          decoration: TextDecoration.lineThrough,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _kGreenLight,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          '20% OFF',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: _kGreen,
-                            fontWeight: FontWeight.w700,
+                      
+                      // Show strikethrough original price for percentage discounts
+                      if (appliedDiscount?.type == DiscountType.percentage)
+                        Text(
+                          '₹${item.price.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: _kTextGrey,
+                            decoration: TextDecoration.lineThrough,
                           ),
                         ),
-                      ),
+                      
+                      const SizedBox(width: 6),
+                      
+                      // Show discount badge when a discount applies
+                      if (appliedDiscount != null)
+                        DiscountBadge(discount: appliedDiscount),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -414,9 +429,9 @@ class _ModernCartItemCard extends StatelessWidget {
                           ],
                         ),
                       ),
-                      // Total
+                      // Total (show discounted line total)
                       Text(
-                        '₹${cartItem.lineTotal.toStringAsFixed(0)}',
+                        '₹${discountedLineTotal.toStringAsFixed(0)}',
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w800,
@@ -524,15 +539,22 @@ class _ModernCouponStrip extends StatelessWidget {
 // MODERN BILL SUMMARY
 // ═════════════════════════════════════════════════════════════════
 class _ModernBillSummary extends StatelessWidget {
-  final double total;
+  final dynamic cartState;
 
-  const _ModernBillSummary({required this.total});
+  const _ModernBillSummary({required this.cartState});
 
   @override
   Widget build(BuildContext context) {
-    final delivery = total >= 149 ? 0.0 : 30.0;
-    final savings  = total * 0.20;
-    final grand    = total + delivery;
+    // Calculate subtotal (undiscounted)
+    final subtotal = cartState.items.fold<double>(
+      0.0,
+      (double sum, CartItem ci) => sum + (ci.item.price * ci.quantity),
+    );
+    
+    final savings = cartState.totalSavings;
+    final grandTotal = cartState.grandTotal;
+    final delivery = grandTotal >= 149 ? 0.0 : 30.0;
+    final finalTotal = grandTotal + delivery;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
@@ -552,18 +574,21 @@ class _ModernBillSummary extends StatelessWidget {
         children: [
           _BillRow(
               label: 'Item Total',
-              value: '₹${total.toStringAsFixed(0)}'),
+              value: '₹${subtotal.toStringAsFixed(0)}'),
           const SizedBox(height: 12),
+          if (savings > 0)
+            ...[
+              _BillRow(
+                label: 'Discount',
+                value: '- ₹${savings.toStringAsFixed(0)}',
+                valueColor: _kGreenBright,
+              ),
+              const SizedBox(height: 12),
+            ],
           _BillRow(
             label: 'Delivery Fee',
             value: delivery == 0 ? 'FREE' : '₹${delivery.toStringAsFixed(0)}',
             valueColor: delivery == 0 ? _kGreenBright : _kTextDark,
-          ),
-          const SizedBox(height: 12),
-          _BillRow(
-            label: 'Discount (20%)',
-            value: '- ₹${savings.toStringAsFixed(0)}',
-            valueColor: _kGreenBright,
           ),
           const SizedBox(height: 12),
           Container(height: 1, color: _kBg),
@@ -580,7 +605,7 @@ class _ModernBillSummary extends StatelessWidget {
                 ),
               ),
               Text(
-                '₹${grand.toStringAsFixed(0)}',
+                '₹${finalTotal.toStringAsFixed(0)}',
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w900,

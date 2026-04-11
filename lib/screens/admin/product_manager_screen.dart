@@ -140,11 +140,18 @@ class _ProductFormSheet extends ConsumerStatefulWidget {
 class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
   final _formKey = GlobalKey<FormState>();
 
+  String _offerType = 'none'; // none | percentage | bogo | bulk
+
+  final _discountController = TextEditingController();
+  final _minQtyController = TextEditingController();
+  final _buyQtyController = TextEditingController();
+  final _freeQtyController = TextEditingController();
+
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _imageUrlController;
   late final TextEditingController _priceController;
-  late final TextEditingController _offerPriceController;
+  // late final TextEditingController _offerPriceController;
   late final TextEditingController _quantityController;
 
   String? _selectedCategoryId;
@@ -163,8 +170,8 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
     _imageUrlController = TextEditingController(text: p?.imageUrl ?? '');
     _priceController =
         TextEditingController(text: p != null ? p.price.toString() : '');
-    _offerPriceController = TextEditingController(
-        text: p?.offerPrice != null ? p!.offerPrice.toString() : '');
+    // _offerPriceController = TextEditingController(
+    //     text: p?.offerPrice != null ? p!.offerPrice.toString() : '');
     _quantityController =
         TextEditingController(text: p != null ? p.quantity.toString() : '');
     _selectedCategoryId = p?.categoryId;
@@ -177,7 +184,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
     _descriptionController.dispose();
     _imageUrlController.dispose();
     _priceController.dispose();
-    _offerPriceController.dispose();
+    // _offerPriceController.dispose();
     _quantityController.dispose();
     super.dispose();
   }
@@ -191,7 +198,38 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
     });
 
     final service = ref.read(adminProductServiceProvider);
-    final offerPriceText = _offerPriceController.text.trim();
+
+    // // ✅ STEP 1: Prepare offer FIRST
+    // Map<String, dynamic>? offer;
+    //
+    // if (_offerType != 'none') {
+    //   switch (_offerType) {
+    //     case 'percentage':
+    //       offer = {
+    //         'type': 'percentage',
+    //         'value': double.parse(_discountController.text),
+    //       };
+    //       break;
+    //
+    //     case 'bogo':
+    //       offer = {
+    //         'type': 'bogo',
+    //         'buyQty': int.parse(_buyQtyController.text),
+    //         'freeQty': int.parse(_freeQtyController.text),
+    //       };
+    //       break;
+    //
+    //     case 'bulk':
+    //       offer = {
+    //         'type': 'bulk',
+    //         'minQty': int.parse(_minQtyController.text),
+    //         'discountPercent': double.parse(_discountController.text),
+    //       };
+    //       break;
+    //   }
+    // }
+
+    // ✅ STEP 2: Create product
     final product = Item(
       id: widget.product?.id ??
           FirebaseFirestore.instance.collection('products').doc().id,
@@ -199,10 +237,10 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
       description: _descriptionController.text.trim(),
       imageUrl: _imageUrlController.text.trim(),
       price: double.parse(_priceController.text.trim()),
-      offerPrice: offerPriceText.isNotEmpty ? double.parse(offerPriceText) : null,
       quantity: int.parse(_quantityController.text.trim()),
       categoryId: _selectedCategoryId!,
       inStock: _inStock,
+      // offer: offer, // ✅ PASS HERE
     );
 
     try {
@@ -211,6 +249,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
       } else {
         await service.addProduct(product);
       }
+
       widget.onSaved();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -306,21 +345,69 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                   return null;
                 },
               ),
+
+
+              // const SizedBox(height: 12),
+              // DropdownButtonFormField<String>(
+              //   value: _offerType,
+              //   decoration: const InputDecoration(labelText: 'Offer Type'),
+              //   items: const [
+              //     DropdownMenuItem(value: 'none', child: Text('No Offer')),
+              //     DropdownMenuItem(value: 'percentage', child: Text('Percentage Discount')),
+              //     DropdownMenuItem(value: 'bogo', child: Text('Buy 1 Get 1')),
+              //     DropdownMenuItem(value: 'bulk', child: Text('Bulk Discount')),
+              //   ],
+              //   onChanged: (v) => setState(() => _offerType = v!),
+              // ),
+              //
+              // if (_offerType == 'percentage') ...[
+              //   TextFormField(
+              //     controller: _discountController,
+              //     decoration: const InputDecoration(labelText: 'Discount %'),
+              //     keyboardType: TextInputType.number,
+              //   ),
+              // ],
+              //
+              // if (_offerType == 'bogo') ...[
+              //   TextFormField(
+              //     controller: _buyQtyController,
+              //     decoration: const InputDecoration(labelText: 'Buy Qty'),
+              //     keyboardType: TextInputType.number,
+              //   ),
+              //   TextFormField(
+              //     controller: _freeQtyController,
+              //     decoration: const InputDecoration(labelText: 'Free Qty'),
+              //     keyboardType: TextInputType.number,
+              //   ),
+              // ],
+              //
+              // if (_offerType == 'bulk') ...[
+              //   TextFormField(
+              //     controller: _minQtyController,
+              //     decoration: const InputDecoration(labelText: 'Min Qty'),
+              //     keyboardType: TextInputType.number,
+              //   ),
+              //   TextFormField(
+              //     controller: _discountController,
+              //     decoration: const InputDecoration(labelText: 'Discount %'),
+              //     keyboardType: TextInputType.number,
+              //   ),
+              // ],
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _offerPriceController,
-                decoration: const InputDecoration(
-                    labelText: 'Offer Price (optional)'),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return null;
-                  if (double.tryParse(v.trim()) == null) {
-                    return 'Must be a valid number';
-                  }
-                  return null;
-                },
-              ),
+              // TextFormField(
+              //   controller: _offerPriceController,
+              //   decoration: const InputDecoration(
+              //       labelText: 'Offer Price (optional)'),
+              //   keyboardType:
+              //       const TextInputType.numberWithOptions(decimal: true),
+              //   validator: (v) {
+              //     if (v == null || v.trim().isEmpty) return null;
+              //     if (double.tryParse(v.trim()) == null) {
+              //       return 'Must be a valid number';
+              //     }
+              //     return null;
+              //   },
+              // ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _quantityController,

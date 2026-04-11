@@ -66,19 +66,25 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           _NavTile(
             icon: Icons.category,
             title: 'Category Manager',
-            onTap: () => context.go('/admin/categories'),
+            onTap: () => context.push('/admin/categories'),
           ),
           const SizedBox(height: 12),
           _NavTile(
             icon: Icons.inventory_2,
             title: 'Product Manager',
-            onTap: () => context.go('/admin/products'),
+            onTap: () => context.push('/admin/products'),
           ),
           const SizedBox(height: 12),
           _NavTile(
             icon: Icons.receipt_long,
             title: 'Order Manager',
-            onTap: () => context.go('/admin/orders'),
+            onTap: () => context.push('/admin/orders'),
+          ),
+          const SizedBox(height: 12),
+          _NavTile(
+            icon: Icons.local_offer,
+            title: 'Discount Manager',
+            onTap: () => context.push('/admin/discounts'),
           ),
           const SizedBox(height: 24),
           ElevatedButton(

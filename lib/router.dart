@@ -10,6 +10,7 @@ import 'models/location_state.dart';
 import 'screens/auth_screen.dart';
 import 'screens/location_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/all_products_screen.dart';
 import 'screens/item_detail_screen.dart';
 import 'screens/cart_screen.dart';
 import 'screens/checkout_screen.dart';
@@ -20,6 +21,7 @@ import 'screens/admin/category_manager_screen.dart';
 import 'screens/admin/product_manager_screen.dart';
 import 'screens/admin/order_manager_screen.dart';
 import 'screens/admin/order_detail_screen.dart';
+import 'screens/admin/discount_manager_screen.dart';
 
 /// A [ChangeNotifier] that listens to auth and location state changes
 /// and notifies go_router to re-evaluate redirect guards.
@@ -144,6 +146,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         // builder: (context, state) => const AdminDashboardScreen(),
       ),
       GoRoute(
+        path: '/all-products',
+        builder: (context, state) => const AllProductsScreen(),
+      ),
+      GoRoute(
         path: '/item/:id',
         builder: (context, state) => ItemDetailScreen(
           itemId: state.pathParameters['id']!,
@@ -187,6 +193,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => OrderDetailScreen(
           orderId: state.pathParameters['id']!,
         ),
+      ),
+      GoRoute(
+        path: '/admin/discounts',
+        builder: (context, state) => const DiscountManagerScreen(),
       ),
     ],
   );

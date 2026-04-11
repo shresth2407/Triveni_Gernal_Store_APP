@@ -67,16 +67,45 @@ class _LocationScreenState extends ConsumerState<LocationScreen>
     }
     setState(() => _validationError = null);
     ref.read(locationProvider.notifier).setManual(text);
-    context.go('/home');
+    
+    // Check if we came from checkout
+    final uri = GoRouterState.of(context).uri;
+    final fromCheckout = uri.queryParameters['from'] == 'checkout';
+    
+    if (fromCheckout) {
+      context.go('/checkout');
+    } else {
+      context.go('/home');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final locationState = ref.watch(locationProvider);
     final isLoading = locationState.isLoading;
+    
+    // Check if we came from checkout
+    final uri = GoRouterState.of(context).uri;
+    final fromCheckout = uri.queryParameters['from'] == 'checkout';
 
     return Scaffold(
       backgroundColor: _kBg,
+      appBar: fromCheckout ? AppBar(
+        backgroundColor: _kBg,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: _kTextDark, size: 20),
+          onPressed: () => context.go('/checkout'),
+        ),
+        title: const Text(
+          'Change Address',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: _kTextDark,
+          ),
+        ),
+      ) : null,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
