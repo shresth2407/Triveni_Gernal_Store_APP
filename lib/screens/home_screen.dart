@@ -1,12 +1,8 @@
-
-
-
-
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shimmer/shimmer.dart';
 import 'dart:async'; // Added for Timer/Stream functionality
 
 import '../models/category.dart';
@@ -168,12 +164,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       // ── CATEGORIES ──────────────────────────
                       _SectionHeader(title: 'Shop by Category', onSeeAll: () => context.push('/all-products'),),
                       categoriesAsync.when(
-                        loading: () => const SizedBox(
-                          height: 90,
-                          child: Center(
-                            child: CircularProgressIndicator(color: _kRed),
-                          ),
-                        ),
+                        loading: () => const _CategoryShimmer(),
                         error: (_, __) => const SizedBox(),
                         data: (cats) => _CategoryBar(
                           categories: cats,
@@ -190,12 +181,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onSeeAll: () => context.push('/all-products'),
                       ),
                       itemsAsync.when(
-                        loading: () => const SizedBox(
-                          height: 180,
-                          child: Center(
-                            child: CircularProgressIndicator(color: _kRed),
-                          ),
-                        ),
+                        loading: () => const _HorizontalShimmer(),
                         error: (_, __) => const SizedBox(),
                         data: (items) => _PreviouslyBoughtRow(
                           items: items.take(5).toList(),
@@ -211,12 +197,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onSeeAll: () => context.push('/all-products'),
                       ),
                       itemsAsync.when(
-                          loading: () => const SizedBox(
-                            height: 300,
-                            child: Center(
-                              child: CircularProgressIndicator(color: _kRed),
-                            ),
-                          ),
+                          loading: () => const _ProductShimmerGrid(),
+                        //
+                        // const SizedBox(
+                          //   height: 300,
+                          //   child: Center(
+                          //     child: CircularProgressIndicator(color: _kRed),
+                          //   ),
+                          // ),
                           error: (e, _) => _ErrorTile(
                               message: 'Failed to load items',
                               onRetry: _refresh),
@@ -243,15 +231,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                       // ── NEW: ADVERTISEMENT SECTIONS ───────────────────────
                       // const SizedBox(height: 5),
-                      const _AdSection(
-                        title: 'Bank Offers 💳',
-                        ads: _AdData.bankOffers,
+                      _AdImageSection(
+                        title: "Best Offers",
+                        ads: [
+                          "assets/images/banner1.jpeg",
+                          "assets/images/banner2.jpeg",
+                          "assets/images/banner3.jpeg",
+                        ],
                       ),
                       const SizedBox(height: 5),
-                      const _AdSection(
-                        title: 'Weekend Sale 🎉',
-                        ads: _AdData.weekendSale,
-                      ),
+                      // const _AdSection(
+                      //   title: 'Weekend Sale 🎉',
+                      //   ads: _AdData.weekendSale,
+                      // ),
 
                       const SizedBox(height: 50),
                     ],
@@ -734,12 +726,19 @@ class _SectionHeader extends StatelessWidget {
           if (onSeeAll != null)
             GestureDetector(
               onTap: onSeeAll,
-              child: Text(
-                seeAllText ?? 'See All →',
-                style: const TextStyle(
-                    fontSize: 12,
-                    color: _kRed,
-                    fontWeight: FontWeight.w700),
+              child: Row(
+                children: [
+                  Text(
+                    seeAllText ?? 'See All',
+                    style: const TextStyle(
+                        fontSize: 12,
+                        color: _kRed,
+                        fontWeight: FontWeight.w700),
+                  ),
+                  SizedBox(width: 2,),
+                  
+                  Icon(Icons.arrow_forward_ios,color: _kRed,size: 14,)
+                ],
               ),
             ),
         ],
@@ -1099,9 +1098,12 @@ class _ProductGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      // color: Colors.green,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14,vertical: 0),
         child: GridView.builder(
+
+          padding: EdgeInsets.zero,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1416,6 +1418,63 @@ class _AdData {
   ];
 }
 
+
+
+
+class _AdImageSection extends StatelessWidget {
+  final String title;
+  final List<String> ads; // now only image paths
+
+  const _AdImageSection({
+    required this.title,
+    required this.ads,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader(title: title, onSeeAll: null),
+
+        const SizedBox(height: 8),
+
+        SizedBox(
+          height: 140,
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            scrollDirection: Axis.horizontal,
+            itemCount: ads.length,
+            itemBuilder: (context, index) {
+              final imagePath = ads[index];
+
+              return Container(
+                width: 280,
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Image.asset(
+                  imagePath,
+                  fit: BoxFit.cover,
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _AdSection extends StatelessWidget {
   final String title;
   final List<_AdData> ads;
@@ -1527,6 +1586,104 @@ class _ErrorTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+
+class _CategoryShimmer extends StatelessWidget {
+  const _CategoryShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 98,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        itemCount: 6,
+        itemBuilder: (_, __) {
+          return Shimmer.fromColors(
+            baseColor: Colors.grey.shade300,
+            highlightColor: Colors.grey.shade100,
+            child: Container(
+              width: 72,
+              margin: const EdgeInsets.only(right: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+class _ProductShimmerGrid extends StatelessWidget {
+  const _ProductShimmerGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 6,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 0.85,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemBuilder: (_, __) {
+          return Shimmer.fromColors(
+            baseColor: Colors.grey.shade300,
+            highlightColor: Colors.grey.shade100,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+class _HorizontalShimmer extends StatelessWidget {
+  const _HorizontalShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 190,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        itemCount: 5,
+        itemBuilder: (_, __) {
+          return Shimmer.fromColors(
+            baseColor: Colors.grey.shade300,
+            highlightColor: Colors.grey.shade100,
+            child: Container(
+              width: 140,
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

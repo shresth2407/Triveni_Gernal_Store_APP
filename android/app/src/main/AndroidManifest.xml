@@ -4,12 +4,10 @@
     <!-- Location permissions -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-
-    <!-- Needed only for background tracking -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <application
-        android:label="sallon"
+        android:label="Triveni Smart Store"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
@@ -38,11 +36,36 @@
             android:value="2" />
     </application>
 
-    <!-- Package visibility (Android 11+) -->
+    <!-- ✅ FIXED PACKAGE VISIBILITY -->
     <queries>
+
+        <!-- Required for UPI detection -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+
+        <!-- Google Pay -->
+        <package android:name="com.google.android.apps.nbu.paisa.user" />
+
+        <!-- PhonePe -->
+        <package android:name="com.phonepe.app" />
+
+        <!-- Paytm -->
+        <package android:name="net.one97.paytm" />
+
+        <!-- BHIM -->
+        <package android:name="in.org.npci.upiapp" />
+
+        <!-- Amazon Pay -->
+        <package android:name="com.amazon.mobile.shopping" />
+
+        <!-- Optional (keep your existing one) -->
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+
     </queries>
+
 </manifest>

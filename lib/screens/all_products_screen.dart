@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shimmer/shimmer.dart';
 
 import '../models/category.dart';
 import '../models/discount.dart';
@@ -181,56 +182,108 @@ class _AllProductsScreenState extends ConsumerState<AllProductsScreen> {
               ),
             ),
 
+
+
+
             // ── CATEGORIES FILTER ──────────────────────────────────
-            categoriesAsync.when(
-              loading: () => const SizedBox(
-                height: 100,
-                child: Center(child: CircularProgressIndicator(color: _kRed)),
-              ),
-              error: (_, __) => const SizedBox(),
-              data: (cats) => Container(
-                color: _kWhite,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'Categories',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: _kTextDark,
-                        ),
-                      ),
+        categoriesAsync.when(
+          // ✨ SHIMMER LOADER
+          loading: () => Container(
+            color: _kWhite,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: SizedBox(
+                    height: 16,
+                    width: 120,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(color: Colors.white),
                     ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 90,
-                      child: ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        scrollDirection: Axis.horizontal,
-                        children: [
-                          _CategoryChip(
-                            label: 'All',
-                            imageUrl: 'https://cdn-icons-png.flaticon.com/512/1046/1046784.png',
-                            selected: _selectedCategoryId == null,
-                            onTap: () => setState(() => _selectedCategoryId = null),
-                          ),
-                          ...cats.map((c) => _CategoryChip(
-                            label: c.name,
-                            imageUrl: c.imageUrl,
-                            selected: _selectedCategoryId == c.id,
-                            onTap: () => setState(() => _selectedCategoryId = c.id),
-                          )),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 12),
+
+                SizedBox(
+                  height: 90,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: 6,
+                    itemBuilder: (_, __) {
+                      return Shimmer.fromColors(
+                        baseColor: Colors.grey.shade300,
+                        highlightColor: Colors.grey.shade100,
+                        child: Container(
+                          width: 70,
+                          margin: const EdgeInsets.only(right: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
+          ),
+
+          error: (_, __) => const SizedBox(),
+
+          data: (cats) {
+            // ✅ AUTO SELECT FIRST CATEGORY
+            if (_selectedCategoryId == null && cats.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                setState(() {
+                  _selectedCategoryId = cats.first.id;
+                });
+              });
+            }
+
+            return Container(
+              color: _kWhite,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'Categories',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: _kTextDark,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  SizedBox(
+                    height: 90,
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        // ❌ "All" removed
+                        ...cats.map((c) => _CategoryChip(
+                          label: c.name,
+                          imageUrl: c.imageUrl,
+                          selected: _selectedCategoryId == c.id,
+                          onTap: () => setState(() => _selectedCategoryId = c.id),
+                        )),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
 
             // ── PRODUCTS GRID ──────────────────────────────────────
             Expanded(
@@ -238,9 +291,7 @@ class _AllProductsScreenState extends ConsumerState<AllProductsScreen> {
                 onRefresh: _refresh,
                 color: _kRed,
                 child: itemsAsync.when(
-                  loading: () => const Center(
-                    child: CircularProgressIndicator(color: _kRed),
-                  ),
+                  loading: () => const _ProductGridShimmer(),
                   error: (e, _) => Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -433,14 +484,183 @@ class _CategoryFilterChip extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════════
 // PRODUCT CARD
 // ═════════════════════════════════════════════════════════════════
+// class _ProductCard extends ConsumerStatefulWidget {
+//   final Item item;
+//   final List<Discount> activeDiscounts;
+//
+//   const _ProductCard({
+//     required this.item,
+//     required this.activeDiscounts,
+//   });
+//
+//   @override
+//   ConsumerState<_ProductCard> createState() => _ProductCardState();
+// }
+//
+// class _ProductCardState extends ConsumerState<_ProductCard> {
+//   bool _added = false;
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final bestDiscount = const DiscountEngine().bestDiscount(widget.item, widget.activeDiscounts);
+//
+//     return GestureDetector(
+//       onTap: () => context.push('/item/${widget.item.id}'),
+//       child: Container(
+//         decoration: BoxDecoration(
+//           color: _kWhite,
+//           borderRadius: BorderRadius.circular(16),
+//           border: Border.all(color: _kRoseBorder, width: 1.5),
+//           boxShadow: const [
+//             BoxShadow(
+//               color: Color(0x10B22222),
+//               blurRadius: 8,
+//               offset: Offset(0, 3),
+//             ),
+//           ],
+//         ),
+//         child: Column(
+//           crossAxisAlignment: CrossAxisAlignment.start,
+//           children: [
+//             // Image with discount badge
+//             Expanded(
+//               child: Stack(
+//                 children: [
+//                   ClipRRect(
+//                     borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+//                     child: Container(
+//                       color: _kLightRed,
+//                       child:ClipRRect(
+//                         borderRadius: const BorderRadius.vertical(
+//                           top: Radius.circular(14),
+//                         ),
+//                         child: Container(
+//                           height: 140, // 🔥 FIXED HEIGHT (adjust 120–160 as per UI)
+//                           width: double.infinity,
+//                           color: _kLightRed,
+//                           child: Image.network(
+//                             widget.item.imageUrl,
+//                             fit: BoxFit.fitWidth, // ✅ fills horizontally
+//                             alignment: Alignment.topCenter, // optional (better UX)
+//                             errorBuilder: (_, __, ___) => const Icon(
+//                               Icons.image_not_supported,
+//                               color: _kRoseBorder,
+//                               size: 40,
+//                             ),
+//                           ),
+//                         ),
+//                       ),
+//                     ),
+//                   ),
+//                   if (bestDiscount != null)
+//                     Positioned(
+//                       top: 8,
+//                       left: 8,
+//                       child: DiscountBadge(discount: bestDiscount),
+//                     ),
+//                 ],
+//               ),
+//             ),
+//
+//             // Product details
+//             Padding(
+//               padding: const EdgeInsets.all(10),
+//               child: Column(
+//                 crossAxisAlignment: CrossAxisAlignment.start,
+//                 children: [
+//                   Text(
+//                     widget.item.name,
+//                     maxLines: 2,
+//                     overflow: TextOverflow.ellipsis,
+//                     style: const TextStyle(
+//                       fontSize: 13,
+//                       fontWeight: FontWeight.w700,
+//                       color: _kTextDark,
+//                       height: 1.2,
+//                     ),
+//                   ),
+//                   const SizedBox(height: 6),
+//                   Row(
+//                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+//                     crossAxisAlignment: CrossAxisAlignment.end,
+//                     children: [
+//                       Text(
+//                         '₹${widget.item.price.toStringAsFixed(0)}',
+//                         style: const TextStyle(
+//                           fontSize: 16,
+//                           fontWeight: FontWeight.w800,
+//                           color: _kRed,
+//                         ),
+//                       ),
+//                       GestureDetector(
+//                         onTap: () {
+//                           ref.read(cartProvider.notifier).addItem(widget.item);
+//                           HapticFeedback.lightImpact();
+//                           setState(() => _added = true);
+//
+//                           Future.delayed(const Duration(seconds: 2), () {
+//                             if (mounted) setState(() => _added = false);
+//                           });
+//
+//                           ScaffoldMessenger.of(context).showSnackBar(
+//                             SnackBar(
+//                               content: Text('${widget.item.name} added to cart!'),
+//                               backgroundColor: _kRed,
+//                               duration: const Duration(seconds: 1),
+//                               behavior: SnackBarBehavior.floating,
+//                               shape: RoundedRectangleBorder(
+//                                 borderRadius: BorderRadius.circular(10),
+//                               ),
+//                             ),
+//                           );
+//                         },
+//                         child: AnimatedContainer(
+//                           duration: const Duration(milliseconds: 200),
+//                           width: 32,
+//                           height: 32,
+//                           decoration: BoxDecoration(
+//                             gradient: LinearGradient(
+//                               colors: _added
+//                                   ? [_kGreen, _kGreenBright]
+//                                   : [_kDarkRed, _kRed],
+//                             ),
+//                             shape: BoxShape.circle,
+//                             boxShadow: [
+//                               BoxShadow(
+//                                 color: (_added ? _kGreen : _kRed).withOpacity(0.4),
+//                                 blurRadius: 6,
+//                                 offset: const Offset(0, 2),
+//                               ),
+//                             ],
+//                           ),
+//                           child: Icon(
+//                             _added ? Icons.check : Icons.add,
+//                             color: _kWhite,
+//                             size: 18,
+//                           ),
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                 ],
+//               ),
+//             ),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+//
+//
+//
+//
+// }
+
 class _ProductCard extends ConsumerStatefulWidget {
   final Item item;
   final List<Discount> activeDiscounts;
 
-  const _ProductCard({
-    required this.item,
-    required this.activeDiscounts,
-  });
+  const _ProductCard({required this.item, required this.activeDiscounts});
 
   @override
   ConsumerState<_ProductCard> createState() => _ProductCardState();
@@ -451,135 +671,255 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
 
   @override
   Widget build(BuildContext context) {
+    final mrp = (widget.item.price * 1.2).toStringAsFixed(0);
+
+    // Get best discount for this item
     final bestDiscount = const DiscountEngine().bestDiscount(widget.item, widget.activeDiscounts);
 
     return GestureDetector(
       onTap: () => context.push('/item/${widget.item.id}'),
+      child: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: _kWhite,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _kRoseBorder, width: 1.5),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x10B22222),
+                  blurRadius: 10,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Flexible(
+                  flex: 3,
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                        child: Container(
+                          color: _kLightRed,
+                          child: Image.network(
+                            widget.item.imageUrl,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: _kLightRed,
+                              child: const Icon(
+                                Icons.image_not_supported,
+                                color: _kRoseBorder,
+                                size: 40,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Show discount badge if applicable
+                      if (bestDiscount != null)
+                        Positioned(
+                          top: 7,
+                          left: 7,
+                          child: DiscountBadge(discount: bestDiscount),
+                        ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  flex: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'TRIVENI STORE',
+                          style: TextStyle(
+                            fontSize: 8,
+                            color: _kDarkRed,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.item.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _kTextDark,
+                          ),
+                        ),
+                        const Spacer(),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '₹${widget.item.price.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: _kRed,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              '₹$mrp',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: _kTextGrey,
+                                decoration: TextDecoration.lineThrough,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            bottom: 10,
+            right: 10,
+            child: GestureDetector(
+              onTap: () {
+                ref.read(cartProvider.notifier).addItem(widget.item);
+                HapticFeedback.lightImpact();
+                setState(() => _added = true);
+
+                Future.delayed(const Duration(seconds: 2), () {
+                  if (mounted) setState(() => _added = false);
+                });
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content:
+                    Text('${widget.item.name} added to cart!'),
+                    backgroundColor: _kRed,
+                    duration: const Duration(seconds: 1),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                );
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: _added
+                        ? [_kGreen, _kGreenBright]
+                        : [_kDarkRed, _kRed],
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: (_added ? _kGreen : _kRed)
+                          .withOpacity(0.4),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  _added ? Icons.check : Icons.add,
+                  color: _kWhite,
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+class _ProductGridShimmer extends StatelessWidget {
+  const _ProductGridShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 6, // 👈 number of shimmer cards
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 0.85,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemBuilder: (_, __) => const _ProductCardShimmer(),
+      ),
+    );
+  }
+}
+
+
+class _ProductCardShimmer extends StatelessWidget {
+  const _ProductCardShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
       child: Container(
         decoration: BoxDecoration(
-          color: _kWhite,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _kRoseBorder, width: 1.5),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x10B22222),
-              blurRadius: 8,
-              offset: Offset(0, 3),
-            ),
-          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image with discount badge
-            Expanded(
-              child: Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-                    child: Container(
-                      color: _kLightRed,
-                      child: Image.network(
-                        widget.item.imageUrl,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: _kLightRed,
-                          child: const Icon(
-                            Icons.image_not_supported,
-                            color: _kRoseBorder,
-                            size: 40,
-                          ),
-                        ),
-                      ),
-                    ),
+            // 🔥 Image shimmer
+            AspectRatio(
+              aspectRatio: 1,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(14),
                   ),
-                  if (bestDiscount != null)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: DiscountBadge(discount: bestDiscount),
-                    ),
-                ],
+                ),
               ),
             ),
 
-            // Product details
+            // 🔥 Text + price shimmer
             Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    widget.item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: _kTextDark,
-                      height: 1.2,
-                    ),
-                  ),
+                  Container(height: 12, width: double.infinity, color: Colors.white),
                   const SizedBox(height: 6),
+                  Container(height: 12, width: 80, color: Colors.white),
+                  const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
-                        '₹${widget.item.price.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: _kRed,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          ref.read(cartProvider.notifier).addItem(widget.item);
-                          HapticFeedback.lightImpact();
-                          setState(() => _added = true);
-
-                          Future.delayed(const Duration(seconds: 2), () {
-                            if (mounted) setState(() => _added = false);
-                          });
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('${widget.item.name} added to cart!'),
-                              backgroundColor: _kRed,
-                              duration: const Duration(seconds: 1),
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          );
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: _added
-                                  ? [_kGreen, _kGreenBright]
-                                  : [_kDarkRed, _kRed],
-                            ),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: (_added ? _kGreen : _kRed).withOpacity(0.4),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            _added ? Icons.check : Icons.add,
-                            color: _kWhite,
-                            size: 18,
-                          ),
+                      Container(height: 14, width: 50, color: Colors.white),
+                      Container(
+                        height: 28,
+                        width: 28,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
                         ),
                       ),
                     ],

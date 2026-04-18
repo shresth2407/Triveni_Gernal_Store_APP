@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shimmer/shimmer.dart';
 
 import '../models/cart_item.dart';
 import '../models/discount.dart';
@@ -50,7 +51,7 @@ class ItemDetailScreen extends ConsumerWidget {
       child: Scaffold(
         backgroundColor: _kBg,
         body: itemAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator(color: _kRed)),
+          loading: () => const _ItemDetailShimmer(),
           error: (e, _) => Center(child: Text('Error: $e')),
           data: (item) => _ItemDetailBody(item: item, allItemsAsync: allItemsAsync),
         ),
@@ -601,7 +602,99 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
+class _ItemDetailShimmer extends StatelessWidget {
+  const _ItemDetailShimmer();
 
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 🔥 HERO IMAGE
+          Shimmer.fromColors(
+            baseColor: Colors.grey.shade300,
+            highlightColor: Colors.grey.shade100,
+            child: Container(
+              height: 320,
+              width: double.infinity,
+              color: Colors.white,
+            ),
+          ),
+
+          // 🔥 DETAILS CARD
+          Transform.translate(
+            offset: const Offset(0, -30),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: _kWhite,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+              ),
+              child: Shimmer.fromColors(
+                baseColor: Colors.grey.shade300,
+                highlightColor: Colors.grey.shade100,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title
+                    Container(height: 20, width: 200, color: Colors.white),
+                    const SizedBox(height: 10),
+
+                    // Subtitle
+                    Container(height: 14, width: 120, color: Colors.white),
+                    const SizedBox(height: 20),
+
+                    // Price
+                    Container(height: 22, width: 80, color: Colors.white),
+                    const SizedBox(height: 20),
+
+                    // Description lines
+                    Container(height: 12, width: double.infinity, color: Colors.white),
+                    const SizedBox(height: 6),
+                    Container(height: 12, width: double.infinity, color: Colors.white),
+                    const SizedBox(height: 6),
+                    Container(height: 12, width: 200, color: Colors.white),
+
+                    const SizedBox(height: 30),
+
+                    // 🔥 Recommendation shimmer
+                    SizedBox(
+                      height: 180,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: 4,
+                        itemBuilder: (_, __) => Container(
+                          width: 140,
+                          margin: const EdgeInsets.only(right: 12),
+                          child: Column(
+                            children: [
+                              Container(
+                                height: 100,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(height: 12, width: 100, color: Colors.white),
+                              const SizedBox(height: 6),
+                              Container(height: 12, width: 60, color: Colors.white),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 class _RecommendationCard extends StatelessWidget {
   final Item item;
 

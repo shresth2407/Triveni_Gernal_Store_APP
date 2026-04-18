@@ -3,13 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_upi_india/flutter_upi_india.dart';
-
 import '../models/cart_item.dart';
 import '../models/order_request.dart';
 import '../providers/auth_provider.dart';
 import '../providers/cart_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/service_providers.dart';
+
+
+
 
 // ─── DESIGN TOKENS (Preserved) ─────────────────────────
 const _kRed         = Color(0xFFDC143C);
@@ -24,6 +26,18 @@ const _kTextMid     = Color(0xFF555555);
 const _kGreen       = Color(0xFF2E7D32);
 const _kGreenBright = Color(0xFF43A047);
 const _kGreenLight  = Color(0xFFE8F5E9);
+
+class UpiAppModel {
+  final String name;
+  final String packageName;
+  final UpiApplication? application; // null for fallback
+
+  UpiAppModel({
+    required this.name,
+    required this.packageName,
+    this.application,
+  });
+}
 
 // ═════════════════════════════════════════════════════════════════
 // CHECKOUT SCREEN
@@ -52,12 +66,64 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     await _processCodOrder();
   }
 
+
+  // Future<List<UpiAppModel>> getAvailableUpiApps() async {
+  //   F _upiIndia = FlutterUpiIndia();
+  //   List<UpiAppModel> result = [];
+  //
+  //   try {
+  //     final apps = await _upiIndia.getAllUpiApps();
+  //
+  //     for (var app in apps) {
+  //       result.add(
+  //         UpiAppModel(
+  //           name: app.name,
+  //           packageName: app.packageName,
+  //           application: app.upiApplication,
+  //         ),
+  //       );
+  //     }
+  //   } catch (e) {
+  //     print("UPI detection error: $e");
+  //   }
+  //
+  //   // 🔥 Fallback apps (IMPORTANT)
+  //   final fallbackApps = [
+  //     UpiAppModel(
+  //         name: "Google Pay",
+  //         packageName: "com.google.android.apps.nbu.paisa.user"),
+  //     UpiAppModel(
+  //         name: "PhonePe",
+  //         packageName: "com.phonepe.app"),
+  //     UpiAppModel(
+  //         name: "Paytm",
+  //         packageName: "net.one97.paytm"),
+  //   ];
+  //
+  //   // Add fallback if missing
+  //   for (var fallback in fallbackApps) {
+  //     final exists = result.any((e) => e.packageName == fallback.packageName);
+  //     if (!exists) result.add(fallback);
+  //   }
+  //
+  //   return result;
+  // }
+
   Future<void> _handleUpiPayment() async {
     setState(() { _isLoading = true; _error = null; });
 
     try {
       final paymentService = ref.read(paymentServiceProvider);
-      final upiApps = await paymentService.getInstalledUpiApps();
+      // final upiApps = await paymentService.getInstalledUpiApps();
+      final upiApps =  await UpiPay.getInstalledUpiApplications();
+
+      // final UpiIndia _upiIndia = UpiIndia();
+      //
+      // List<UpiApp> apps = await _upiIndia.getAllUpiApps();
+
+      for (var app in upiApps) {
+        print(app.packageName);
+      }
 
       if (!mounted) return;
       setState(() => _isLoading = false);

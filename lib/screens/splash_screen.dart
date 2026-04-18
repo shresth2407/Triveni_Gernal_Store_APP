@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:groicery_delivery/Utility/Utils.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/location_provider.dart';
 
-const _kRed = Color(0xFFDC143C);
+const _kRed = Color(0xFF9F1C20);
 const _kDarkRed = Color(0xFFB22222);
 const _kWhite = Colors.white;
 
@@ -25,7 +26,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   Future<void> _initialize() async {
     // Wait for 1 second minimum for splash screen
-    await Future.delayed(const Duration(seconds: 4));
+    await Future.delayed(const Duration(seconds: 2));
 
     if (!mounted) return;
 
@@ -34,7 +35,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     final isAuthenticated = authState.valueOrNull != null;
 
     if (!isAuthenticated) {
-      context.go('/auth');
+
+      if(Utils.isAdmin){
+        context.go('/admin/login');
+      }else{
+        context.go('/auth');
+      }
+
       return;
     }
 
@@ -42,13 +49,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     final locationState = ref.read(locationProvider);
     final hasLocation = locationState.address != null;
 
-    if (!hasLocation) {
+    if (!hasLocation && !Utils.isAdmin) {
       context.go('/location');
       return;
     }
 
+
+    if(Utils.isAdmin){
+      context.go('/admin/dashboard');
+    }else{
+      context.go('/home');
+    }
     // All good, go to home
-    context.go('/home');
+
   }
 
   @override
@@ -63,44 +76,42 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             Container(
               width: 120,
               height: 120,
-              decoration: BoxDecoration(
-                color: _kWhite,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.shopping_bag,
-                size: 60,
-                color: _kRed,
+              // decoration: BoxDecoration(
+              //   color: _kWhite,
+              //   borderRadius: BorderRadius.circular(30),
+              //   boxShadow: [
+              //     BoxShadow(
+              //       color: Colors.black.withOpacity(0.2),
+              //       blurRadius: 20,
+              //       offset: const Offset(0, 10),
+              //     ),
+              //   ],
+              // ),
+              child:  Image.asset("assets/images/icon.png"
+
               ),
             ),
             const SizedBox(height: 30),
             // App Name
-            const Text(
-              'Triveni Express',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-                color: _kWhite,
-                letterSpacing: -1,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Groceries in 8 minutes',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: _kWhite,
-                letterSpacing: 0.5,
-              ),
-            ),
+            // const Text(
+            //   'Triveni Express',
+            //   style: TextStyle(
+            //     fontSize: 32,
+            //     fontWeight: FontWeight.w900,
+            //     color: _kWhite,
+            //     letterSpacing: -1,
+            //   ),
+            // ),
+            // const SizedBox(height: 8),
+            // const Text(
+            //   'Groceries in 8 minutes',
+            //   style: TextStyle(
+            //     fontSize: 16,
+            //     fontWeight: FontWeight.w600,
+            //     color: _kWhite,
+            //     letterSpacing: 0.5,
+            //   ),
+            // ),
             const SizedBox(height: 50),
             // Loading Indicator
             const SizedBox(
