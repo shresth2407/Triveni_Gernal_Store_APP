@@ -22,11 +22,25 @@ const _kGreen      = Color(0xFF2E7D32);
 const _kGreenLight = Color(0xFFE8F5E9);
 const _kGreenBorder= Color(0xFFA5D6A7);
 
-class DiscountManagerScreen extends ConsumerWidget {
+class DiscountManagerScreen extends ConsumerStatefulWidget {
   const DiscountManagerScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DiscountManagerScreen> createState() => _DiscountManagerScreenState();
+}
+
+class _DiscountManagerScreenState extends ConsumerState<DiscountManagerScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final discountsAsync = ref.watch(allDiscountsProvider);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -55,14 +69,55 @@ class DiscountManagerScreen extends ConsumerWidget {
               ),
               flexibleSpace: FlexibleSpaceBar(
                 collapseMode: CollapseMode.pin,
-                background: _HeroHeader(onAddTap: () => _openDiscountForm(context, ref)),
+                background: _HeroHeader(onAddTap: () => _openDiscountForm(context)),
+              ),
+            ),
+
+            // ─── SEARCH BAR ─────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _kTextDark),
+                  decoration: InputDecoration(
+                    hintText: 'Search discounts...',
+                    hintStyle: const TextStyle(fontSize: 14, color: _kTextGrey, fontWeight: FontWeight.w500),
+                    prefixIcon: const Icon(Icons.search_rounded, color: _kRed, size: 22),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, color: _kTextGrey, size: 20),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: _kWhite,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: _kRoseBorder, width: 1.5),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: _kRoseBorder, width: 1.5),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: _kRed, width: 2),
+                    ),
+                  ),
+                ),
               ),
             ),
 
             // ── Section label ──────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
                 child: discountsAsync.maybeWhen(
                   data: (discounts) => Row(
                     children: [
@@ -110,19 +165,57 @@ class DiscountManagerScreen extends ConsumerWidget {
                 ),
               ),
               data: (discounts) {
+                // Get products and categories for enhanced search
+                final productsAsync = ref.watch(adminProductsProvider);
+                final categoriesAsync = ref.watch(adminCategoriesProvider);
+
+                // Filter discounts based on search query
+                final filteredDiscounts = _searchQuery.isEmpty
+                    ? discounts
+                    : discounts.where((discount) {
+                        // Search by discount name
+                        if (discount.name.toLowerCase().contains(_searchQuery)) {
+                          return true;
+                        }
+
+                        // Search by target product/category name
+                        if (discount.scope == DiscountScope.product) {
+                          return productsAsync.maybeWhen(
+                            data: (products) {
+                              final product = products.where((p) => p.id == discount.targetId).firstOrNull;
+                              return product?.name.toLowerCase().contains(_searchQuery) ?? false;
+                            },
+                            orElse: () => false,
+                          );
+                        } else {
+                          return categoriesAsync.maybeWhen(
+                            data: (categories) {
+                              final category = categories.where((c) => c.id == discount.targetId).firstOrNull;
+                              return category?.name.toLowerCase().contains(_searchQuery) ?? false;
+                            },
+                            orElse: () => false,
+                          );
+                        }
+                      }).toList();
+
                 if (discounts.isEmpty) {
                   return const SliverFillRemaining(child: _EmptyDiscountsCard());
                 }
+
+                if (filteredDiscounts.isEmpty) {
+                  return SliverFillRemaining(child: _NoResultsCard(searchQuery: _searchQuery));
+                }
+
                 return SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                           (context, index) => _DiscountCard(
-                        discount: discounts[index],
+                        discount: filteredDiscounts[index],
                         index: index,
-                        onTap: () => _openDiscountForm(context, ref, discount: discounts[index]),
+                        onTap: () => _openDiscountForm(context, discount: filteredDiscounts[index]),
                       ),
-                      childCount: discounts.length,
+                      childCount: filteredDiscounts.length,
                     ),
                   ),
                 );
@@ -134,7 +227,7 @@ class DiscountManagerScreen extends ConsumerWidget {
     );
   }
 
-  void _openDiscountForm(BuildContext context, WidgetRef ref, {Discount? discount}) {
+  void _openDiscountForm(BuildContext context, {Discount? discount}) {
     HapticFeedback.mediumImpact();
     showModalBottomSheet(
       context: context,
@@ -296,11 +389,34 @@ class _DiscountCard extends ConsumerWidget {
 
   String _scopeLabel() => discount.scope == DiscountScope.product ? 'Product' : 'Category';
 
+  String _getTargetName(WidgetRef ref) {
+    if (discount.scope == DiscountScope.product) {
+      final productsAsync = ref.watch(adminProductsProvider);
+      return productsAsync.maybeWhen(
+        data: (products) {
+          final product = products.where((p) => p.id == discount.targetId).firstOrNull;
+          return product?.name ?? 'Unknown Product';
+        },
+        orElse: () => 'Loading...',
+      );
+    } else {
+      final categoriesAsync = ref.watch(adminCategoriesProvider);
+      return categoriesAsync.maybeWhen(
+        data: (categories) {
+          final category = categories.where((c) => c.id == discount.targetId).firstOrNull;
+          return category?.name ?? 'Unknown Category';
+        },
+        orElse: () => 'Loading...',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gradient = _typeGradients[discount.type]!;
     final icon     = _typeIcons[discount.type]!;
     final typeLabel= _typeLabels[discount.type]!;
+    final targetName = _getTargetName(ref);
 
     return GestureDetector(
       onTap: () { HapticFeedback.lightImpact(); onTap(); },
@@ -337,7 +453,11 @@ class _DiscountCard extends ConsumerWidget {
                         Text(discount.name,
                             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _kTextDark),
                             maxLines: 1, overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 3),
+                        Text(targetName,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _kTextGrey),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 4),
                         Row(
                           children: [
                             _TypeChip(label: typeLabel, gradient: gradient),
@@ -545,6 +665,47 @@ class _EmptyDiscountsCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: _kTextGrey, fontSize: 12, height: 1.5)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── NO RESULTS CARD ──────────────────────────────────────────────
+class _NoResultsCard extends StatelessWidget {
+  final String searchQuery;
+  const _NoResultsCard({required this.searchQuery});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Container(
+          padding: const EdgeInsets.all(40),
+          decoration: BoxDecoration(
+            color: _kWhite,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: _kRoseBorder, width: 1.5),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _kLightRed,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _kRoseBorder, width: 2),
+                ),
+                child: const Icon(Icons.search_off_rounded, size: 40, color: _kRoseBorder),
+              ),
+              const SizedBox(height: 20),
+              const Text('No Discounts Found', style: TextStyle(color: _kTextDark, fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              Text('No results for "$searchQuery"', textAlign: TextAlign.center, style: const TextStyle(color: _kTextGrey, fontSize: 13)),
+            ],
+          ),
         ),
       ),
     );

@@ -1,11 +1,13 @@
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../models/admin_order.dart';
 import '../../providers/admin/admin_data_providers.dart';
+import '../../providers/admin/admin_service_providers.dart';
 
 // ─── DESIGN TOKENS ────────────────────────────────────────────────
 const _kRed         = Color(0xFFDC143C);
@@ -20,11 +22,73 @@ const _kTextMid     = Color(0xFF555555);
 const _kGreen       = Color(0xFF2E7D32);
 const _kGreenLight  = Color(0xFFE8F5E9);
 
-class OrderManagerScreen extends ConsumerWidget {
+class OrderManagerScreen extends ConsumerStatefulWidget {
   const OrderManagerScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OrderManagerScreen> createState() => _OrderManagerScreenState();
+}
+
+class _OrderManagerScreenState extends ConsumerState<OrderManagerScreen> {
+  final List<AdminOrder> _allOrders = [];
+  DocumentSnapshot? _lastDocument;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+    
+    setState(() => _isLoadingMore = true);
+    
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('orders')
+          .orderBy('createdAt', descending: true)
+          .startAfterDocument(_lastDocument!)
+          .limit(20)
+          .get();
+      
+      if (snapshot.docs.isEmpty) {
+        setState(() => _hasMore = false);
+      } else {
+        final newOrders = snapshot.docs.map(AdminOrder.fromFirestore).toList();
+        setState(() {
+          _allOrders.addAll(newOrders);
+          _lastDocument = snapshot.docs.last;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load more: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final ordersAsync = ref.watch(adminOrdersProvider);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -32,6 +96,7 @@ class OrderManagerScreen extends ConsumerWidget {
       child: Scaffold(
         backgroundColor: _kBg,
         body: CustomScrollView(
+          controller: _scrollController,
           slivers: [
             // ─── CUSTOM APP BAR ─────────────────────────────────────
             SliverAppBar(
@@ -85,7 +150,29 @@ class OrderManagerScreen extends ConsumerWidget {
                   onRetry: () => ref.invalidate(adminOrdersProvider),
                 ),
                 data: (orders) {
-                  if (orders.isEmpty) {
+                  // Initialize _allOrders on first load
+                  if (_allOrders.isEmpty && orders.isNotEmpty) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      setState(() {
+                        _allOrders.addAll(orders);
+                        // Get last document for pagination
+                        FirebaseFirestore.instance
+                            .collection('orders')
+                            .orderBy('createdAt', descending: true)
+                            .limit(orders.length)
+                            .get()
+                            .then((snapshot) {
+                          if (snapshot.docs.isNotEmpty) {
+                            _lastDocument = snapshot.docs.last;
+                          }
+                        });
+                      });
+                    });
+                  }
+
+                  final displayOrders = _allOrders.isEmpty ? orders : _allOrders;
+
+                  if (displayOrders.isEmpty) {
                     return const _EmptyOrdersCard();
                   }
                   return Padding(
@@ -96,11 +183,32 @@ class OrderManagerScreen extends ConsumerWidget {
                         // Header info
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text('${orders.length} Active Orders', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _kTextGrey)),
+                          child: Text('${displayOrders.length} Orders', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _kTextGrey)),
                         ),
                         const SizedBox(height: 16),
                         // List
-                        ...orders.map((order) => _OrderCard(order: order)).toList(),
+                        ...displayOrders.map((order) => _OrderCard(order: order)).toList(),
+                        
+                        // Loading more indicator
+                        if (_isLoadingMore)
+                          const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Center(
+                              child: CircularProgressIndicator(color: _kRed),
+                            ),
+                          ),
+                        
+                        // End of list indicator
+                        if (!_hasMore && displayOrders.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Center(
+                              child: Text(
+                                'No more orders',
+                                style: TextStyle(color: _kTextGrey, fontSize: 12),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   );
@@ -236,7 +344,7 @@ class _OrderCard extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        '\$${total.toStringAsFixed(2)}',
+                        '₹ ${total.toStringAsFixed(2)}',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _kRed),
                       ),
                       const SizedBox(width: 8),

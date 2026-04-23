@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/models.dart';
 import '../../providers/admin/admin_data_providers.dart';
 import '../../providers/admin/admin_service_providers.dart';
+import '../../providers/service_providers.dart';
 
 // ─── DESIGN TOKENS ────────────────────────────────────────────────
 const _kRed         = Color(0xFFDC143C);
@@ -537,9 +538,10 @@ class _CategoryFormSheet extends ConsumerStatefulWidget {
 class _CategoryFormSheetState extends ConsumerState<_CategoryFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
-  late final TextEditingController _imageUrlController;
   late final TextEditingController _sortOrderController;
 
+  String? _uploadedImageUrl;
+  bool _isUploadingImage = false;
   bool _isSubmitting = false;
   String? _errorMessage;
 
@@ -549,7 +551,7 @@ class _CategoryFormSheetState extends ConsumerState<_CategoryFormSheet> {
   void initState() {
     super.initState();
     _nameController      = TextEditingController(text: widget.category?.name ?? '');
-    _imageUrlController  = TextEditingController(text: widget.category?.imageUrl ?? '');
+    _uploadedImageUrl    = widget.category?.imageUrl;
     _sortOrderController = TextEditingController(
       text: widget.category != null ? widget.category!.sortOrder.toString() : '',
     );
@@ -558,13 +560,45 @@ class _CategoryFormSheetState extends ConsumerState<_CategoryFormSheet> {
   @override
   void dispose() {
     _nameController.dispose();
-    _imageUrlController.dispose();
     _sortOrderController.dispose();
     super.dispose();
   }
 
+  Future<void> _pickAndUploadImage() async {
+    setState(() => _isUploadingImage = true);
+    
+    try {
+      final imageUrl = await ref.read(imageUploadServiceProvider).pickAndUploadImage(
+        folder: 'categories',
+        context: context,
+      );
+      
+      if (imageUrl != null) {
+        setState(() => _uploadedImageUrl = imageUrl);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingImage = false);
+      }
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    
+    if (_uploadedImageUrl == null || _uploadedImageUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please upload a category image')),
+      );
+      return;
+    }
+    
     setState(() { _isSubmitting = true; _errorMessage = null; });
     HapticFeedback.mediumImpact();
 
@@ -573,7 +607,7 @@ class _CategoryFormSheetState extends ConsumerState<_CategoryFormSheet> {
       id: widget.category?.id ??
           FirebaseFirestore.instance.collection('categories').doc().id,
       name: _nameController.text.trim(),
-      imageUrl: _imageUrlController.text.trim(),
+      imageUrl: _uploadedImageUrl!,
       sortOrder: int.parse(_sortOrderController.text.trim()),
     );
 
@@ -690,13 +724,15 @@ class _CategoryFormSheetState extends ConsumerState<_CategoryFormSheet> {
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
               ),
               const SizedBox(height: 12),
-              _StyledField(
-                controller: _imageUrlController,
-                label: 'Image URL',
-                icon: Icons.image_rounded,
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Image URL is required' : null,
+              
+              // Image Upload Widget
+              _ImageUploadWidget(
+                imageUrl: _uploadedImageUrl,
+                isUploading: _isUploadingImage,
+                onUpload: _pickAndUploadImage,
               ),
               const SizedBox(height: 12),
+              
               _StyledField(
                 controller: _sortOrderController,
                 label: 'Sort Order',
@@ -793,6 +829,164 @@ class _StyledField extends StatelessWidget {
         focusedBorder:     OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: _kRed, width: 2)),
         errorBorder:       OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: _kDarkRed, width: 1.5)),
         focusedErrorBorder:OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: _kDarkRed, width: 2)),
+      ),
+    );
+  }
+}
+
+// ─── IMAGE UPLOAD WIDGET ─────────────────────────────────────────
+class _ImageUploadWidget extends StatelessWidget {
+  final String? imageUrl;
+  final bool isUploading;
+  final VoidCallback onUpload;
+
+  const _ImageUploadWidget({
+    required this.imageUrl,
+    required this.isUploading,
+    required this.onUpload,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _kLightRed,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kRoseBorder, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Label
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Row(
+              children: [
+                Icon(Icons.image_rounded, color: _kRed, size: 20),
+                const SizedBox(width: 10),
+                const Text(
+                  'Category Image',
+                  style: TextStyle(fontSize: 13, color: _kTextGrey, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+
+          // Image Preview or Upload Button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+            child: imageUrl != null && imageUrl!.isNotEmpty
+                ? Column(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          imageUrl!,
+                          height: 160,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 160,
+                            decoration: BoxDecoration(
+                              color: _kWhite,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.broken_image, color: _kRoseBorder, size: 48),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      GestureDetector(
+                        onTap: isUploading ? null : onUpload,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _kWhite,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _kRoseBorder, width: 1.5),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.refresh, color: _kRed, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Change Image',
+                                style: TextStyle(
+                                  color: _kRed,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : GestureDetector(
+                    onTap: isUploading ? null : onUpload,
+                    child: Container(
+                      height: 140,
+                      decoration: BoxDecoration(
+                        color: _kWhite,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _kRoseBorder, width: 1.5),
+                      ),
+                      child: isUploading
+                          ? const Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircularProgressIndicator(color: _kRed, strokeWidth: 2.5),
+                                  SizedBox(height: 10),
+                                  Text(
+                                    'Uploading...',
+                                    style: TextStyle(
+                                      color: _kTextGrey,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: _kLightRed,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: _kRoseBorder, width: 1.5),
+                                  ),
+                                  child: const Icon(Icons.add_photo_alternate_rounded, color: _kRed, size: 28),
+                                ),
+                                const SizedBox(height: 10),
+                                const Text(
+                                  'Upload Category Image',
+                                  style: TextStyle(
+                                    color: _kTextDark,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                const Text(
+                                  'Tap to select from gallery',
+                                  style: TextStyle(
+                                    color: _kTextGrey,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
   }

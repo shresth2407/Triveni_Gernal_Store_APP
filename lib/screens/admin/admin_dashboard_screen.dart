@@ -274,6 +274,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               // const SizedBox(height: 20),
 
               // Latest orders
+
+              SizedBox(height: 8,),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [

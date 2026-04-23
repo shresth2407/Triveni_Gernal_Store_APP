@@ -1,3 +1,3 @@
 class Utils{
- static bool isAdmin = false;
+ static bool isAdmin = true;
 }

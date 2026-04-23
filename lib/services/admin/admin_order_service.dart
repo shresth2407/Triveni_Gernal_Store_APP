@@ -4,6 +4,7 @@ import '../../models/models.dart';
 abstract class AdminOrderService {
   Stream<List<AdminOrder>> watchPendingOrders();
   Stream<List<AdminOrder>> watchLatestOrders({int limit = 10});
+  Stream<List<AdminOrder>> watchAllOrders({int limit = 20, DocumentSnapshot? startAfter});
   Future<AdminOrder> getOrderById(String orderId);
   Future<void> updateOrderStatus(String orderId, String newStatus);
 }
@@ -29,11 +30,27 @@ class FirestoreAdminOrderService implements AdminOrderService {
   Stream<List<AdminOrder>> watchLatestOrders({int limit = 10}) {
     return _firestore
         .collection('orders')
+        .where('status', whereNotIn: ['delivered'])
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
         .map((snapshot) =>
             snapshot.docs.map(AdminOrder.fromFirestore).toList());
+  }
+
+  @override
+  Stream<List<AdminOrder>> watchAllOrders({int limit = 20, DocumentSnapshot? startAfter}) {
+    Query query = _firestore
+        .collection('orders')
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+    
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+    
+    return query.snapshots().map((snapshot) =>
+        snapshot.docs.map(AdminOrder.fromFirestore).toList());
   }
 
   @override

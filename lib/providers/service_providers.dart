@@ -4,6 +4,7 @@ import '../services/product_service.dart';
 import '../services/order_service.dart';
 import '../services/payment_service.dart';
 import '../services/profile_service.dart';
+import '../services/image_upload_service.dart';
 import '../models/admin_order.dart';
 import '../models/user_profile.dart';
 import 'auth_provider.dart';
@@ -26,6 +27,10 @@ final paymentServiceProvider = Provider<PaymentService>((ref) {
 
 final profileServiceProvider = Provider<ProfileService>((ref) {
   return FirestoreProfileService();
+});
+
+final imageUploadServiceProvider = Provider<ImageUploadService>((ref) {
+  return FirebaseImageUploadService();
 });
 
 // Stream provider for user orders

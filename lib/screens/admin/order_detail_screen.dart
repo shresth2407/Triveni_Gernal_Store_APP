@@ -234,7 +234,7 @@ class _OrderSummaryCard extends StatelessWidget {
             children: [
               Text('Total Amount', style: TextStyle(fontSize: 11, color: _kTextGrey, fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
-              Text('\$${order.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: _kRed)),
+              Text('₹ ${order.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: _kRed)),
             ],
           ),
         ],
@@ -478,7 +478,7 @@ class _ItemsCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Grand Total', style: TextStyle(fontSize: 14, color: _kTextGrey)),
-                Text('\$${order.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _kRed)),
+                Text('₹ ${order.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _kRed)),
               ],
             ),
           ),
@@ -552,11 +552,11 @@ class _ItemTile extends StatelessWidget {
               children: [
                 Text(item.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _kTextDark)),
                 const SizedBox(height: 4),
-                Text('\$${item.unitPrice.toStringAsFixed(2)} x ${item.quantity}', style: const TextStyle(fontSize: 12, color: _kTextGrey)),
+                Text('₹ ${item.unitPrice.toStringAsFixed(2)} x ${item.quantity}', style: const TextStyle(fontSize: 12, color: _kTextGrey)),
               ],
             ),
           ),
-          Text('\$${item.lineTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _kTextDark)),
+          Text('₹ ${item.lineTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _kTextDark)),
         ],
       ),
     );
